@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}General ledger | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Accounting / Reports</p><h1>General ledger</h1></div>
+    <div class="header-actions"><a class="button-link" href="?account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}&amp;format=csv">Export CSV</a></div>
+</section>
+<section class="card">
+    <p>Organization: <strong>{{ organization.name }}</strong>. Includes posted entries only.</p>
+    <form method="get" class="inline-form">
+        <label>Financial year
+            <select class="form-control" name="financial_year">
+                <option value="">Cumulative ledger</option>
+                {% for year in financial_years %}
+                <option value="{{ year.pk }}" {% if selected_financial_year.pk == year.pk %}selected{% endif %}>{{ year.name }} ({{ year.starts_on }}–{{ year.ends_on }})</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Account
+            <select class="form-control" name="account">
+                <option value="">All accounts</option>
+                {% for account in accounts %}<option value="{{ account.pk }}" {% if selected_account == account.pk|stringformat:'s' %}selected{% endif %}>{{ account.code }} — {{ account.name }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>From <input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+        <label>To <input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+        <button class="button" type="submit">Filter</button>
+    </form>
+    {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running net</th></tr></thead>
+        <tbody>
+        {% for row in rows %}<tr><td>{{ row.date }}</td><td>{{ row.reference }}</td><td>{{ row.account.code }} — {{ row.account.name }}</td><td>{{ row.description }}</td><td>{{ row.debit }}</td><td>{{ row.credit }}</td><td>{{ row.balance }}</td></tr>
+        {% empty %}<tr><td colspan="7">No posted journal lines found for this period.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if rows.has_other_pages %}
+    <div class="pagination">
+        {% if rows.has_previous %}<a class="button-link" href="?page={{ rows.previous_page_number }}&amp;account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous</a>{% endif %}
+        <span>Page {{ rows.number }} of {{ rows.paginator.num_pages }}</span>
+        {% if rows.has_next %}<a class="button-link" href="?page={{ rows.next_page_number }}&amp;account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Bank transaction | Nexora ERP{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Cash management</p>
+        <h1>{{ transaction.reference_number }}</h1>
+    </div>
+</section>
+
+<section class="card">
+    <ul class="list-stack">
+        <li><span>Account</span><strong>{{ transaction.account }}</strong></li>
+        <li><span>Type</span><strong>{{ transaction.get_transaction_type_display }}</strong></li>
+        <li><span>Date</span><strong>{{ transaction.transaction_date }}</strong></li>
+        <li><span>Amount</span><strong>{{ transaction.amount }}</strong></li>
+        <li><span>Status</span><strong>{{ transaction.get_status_display }}</strong></li>
+        <li><span>Reference</span><strong>{{ transaction.payment_reference }}</strong></li>
+        <li><span>Description</span><strong>{{ transaction.description }}</strong></li>
+    </ul>
+    {% if transaction.transaction_type == 'receipt' or transaction.transaction_type == 'payment' %}
+    <p><strong>Unapplied amount:</strong> {{ available_amount }}</p>
+    {% endif %}
+</section>
+
+{% if transaction.transaction_type == 'receipt' or transaction.transaction_type == 'payment' %}
+<section class="card">
+    <h2>Invoice allocations</h2>
+    <p>Allocations apply the existing receipt or payment to an invoice. They do not create another cash or bank entry.</p>
+    {% if can_manage_allocations and available_amount > 0 and allocation_candidates %}
+    <form method="post" action="{% url 'bank_transaction_allocate' transaction.pk %}" class="inline-form">
+        {% csrf_token %}
+        {{ allocation_form.non_field_errors }}
+        <label>Invoice {{ allocation_form.invoice }}</label>
+        <label>Amount {{ allocation_form.amount }}</label>
+        <button class="button" type="submit">Allocate payment</button>
+    </form>
+    {% elif available_amount <= 0 %}
+    <p>This transaction has no unapplied amount.</p>
+    {% elif not allocation_candidates %}
+    <p>No outstanding posted invoices are available for this counterparty and branch.</p>
+    {% endif %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Invoice</th><th>Original amount</th><th>Previously allocated</th><th>Remaining</th></tr></thead>
+        <tbody>
+        {% for invoice in allocation_candidates %}
+            <tr>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.total_amount }}</td>
+                <td>{{ invoice.allocated_amount }}</td>
+                <td>{{ invoice.remaining_amount }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4">No outstanding invoices available.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+</section>
+
+<section class="card">
+    <h2>Allocation history</h2>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Invoice</th><th>Amount</th><th>Recorded</th><th>Status</th><th>Reversal details / action</th></tr></thead>
+        <tbody>
+        {% for allocation in allocations %}
+            <tr>
+                <td>{{ allocation.invoice.invoice_number }}</td>
+                <td>{{ allocation.amount }}</td>
+                <td>{{ allocation.created_at }}</td>
+                <td>{% if allocation.is_active %}Active{% else %}Reversed{% endif %}</td>
+                <td>
+                    {% if allocation.is_active and can_reverse_allocations %}
+                    <form method="post" action="{% url 'allocation_reverse' allocation.pk %}">
+                        {% csrf_token %}
+                        <label>Reason <input class="form-control" name="reason" maxlength="255" required></label>
+                        <button class="button button-secondary" type="submit">Reverse allocation</button>
+                    </form>
+                    {% elif not allocation.is_active %}
+                    {{ allocation.reversal_reason }}{% if allocation.reversed_by %} — {{ allocation.reversed_by }}{% endif %}
+                    {% else %}Reversal permission required{% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5">No allocations have been recorded.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+</section>
+{% endif %}
+{% endblock %}

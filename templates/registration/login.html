@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Login | Nexora ERP{% endblock %}
+
+{% block content %}
+<div class="login-card">
+    <span class="login-eyebrow">YOUR BUSINESS WORKSPACE</span>
+    <h1>Welcome back</h1>
+    <p class="login-intro">Sign in with the user ID and password provided by your administrator.</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        {{ form.non_field_errors }}
+        <div class="form-group">
+            <label for="id_username">{{ form.username.label }}</label>
+            {{ form.username }}
+            {{ form.username.errors }}
+        </div>
+        <div class="form-group">
+            <label for="id_password">{{ form.password.label }}</label>
+            {{ form.password }}
+            {{ form.password.errors }}
+        </div>
+        <button type="submit" class="button primary login-submit">Sign in</button>
+    </form>
+    <p class="login-help">Need access? Contact your organization administrator.</p>
+</div>
+{% endblock %}

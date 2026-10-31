@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Inventory valuation | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Inventory reporting</p><h1>Inventory valuation</h1></div>
+    <div class="header-actions">
+        <a class="button-link" href="?as_of={{ as_of|date:'Y-m-d' }}&branch={{ branch.pk|default:'' }}&warehouse={{ selected_warehouse.pk|default:'' }}&q={{ query|urlencode }}&format=csv">Export positions CSV</a>
+        <a class="button-link" href="?as_of={{ as_of|date:'Y-m-d' }}&branch={{ branch.pk|default:'' }}&warehouse={{ selected_warehouse.pk|default:'' }}&q={{ query|urlencode }}&history_csv=1">Export history CSV</a>
+        {% if can_manage %}<a class="button-link primary" href="{% url 'inventory_opening_valuation' %}">Record opening valuation</a>{% endif %}
+    </div>
+</section>
+<form method="get" class="panel filter-form">
+    <label>As of date<input class="form-control" type="date" name="as_of" value="{{ as_of|date:'Y-m-d' }}"></label>
+    {% if not user.branch_id %}<label>Branch<select class="form-control" name="branch"><option value="">All branches</option>{% for option in branches %}<option value="{{ option.pk }}" {% if branch.pk == option.pk %}selected{% endif %}>{{ option.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Warehouse<select class="form-control" name="warehouse"><option value="">All warehouses</option>{% for option in warehouses %}<option value="{{ option.pk }}" {% if selected_warehouse.pk == option.pk %}selected{% endif %}>{{ option.code }} — {{ option.name }}</option>{% endfor %}</select></label>
+    <label>Product search<input class="form-control" name="q" value="{{ query }}" placeholder="SKU or name"></label>
+    <button class="primary" type="submit">Apply filters</button>
+</form>
+<div class="metrics-grid">
+    <div class="metric-card"><span>Valued stock</span><strong>{{ total_value }}</strong></div>
+    <div class="metric-card"><span>Unvalued positions</span><strong>{{ unvalued_count }}</strong></div>
+    <div class="metric-card"><span>Negative stock exceptions</span><strong>{{ negative_count }}</strong></div>
+    <div class="metric-card"><span>Inventory control account</span><strong>{{ gl_inventory }}</strong></div>
+</div>
+<div class="panel">
+    <h2>Subledger reconciliation</h2>
+    <p><strong>{{ reconciliation_status }}</strong> — Inventory value less adjusted GL value: {{ reconciliation_difference }}.</p>
+    <p>Reconciling items: uninvoiced receipts {{ unbilled_receipt_value }}, receipt-only supplier returns {{ unbilled_return_cost }}, and dispatched deliveries awaiting sales invoices {{ pending_delivery_cost }}. Incomplete legacy positions and supplier invoice price differences require review.</p>
+</div>
+{% if unallocated %}<div class="panel"><h2>Unallocated legacy stock</h2><p>Organization-wide product quantity exceeds warehouse movements. Allocate and value this stock before dispatch.</p><ul>{% for item in unallocated %}<li>{{ item.product.sku }} — {{ item.product.name }}: {{ item.quantity }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="panel table-wrap">
+    <h2>Valuation positions as of {{ as_of|date:'Y-m-d' }}</h2>
+    <table><thead><tr><th>SKU</th><th>Product</th><th>Warehouse</th><th>Branch</th><th>Quantity</th><th>Weighted average unit cost</th><th>Total value</th><th>Exception</th></tr></thead>
+    <tbody>{% for row in rows %}<tr>
+        <td>{{ row.product.sku }}</td><td>{{ row.product.name }}</td><td>{{ row.warehouse.code }} — {{ row.warehouse.name }}</td><td>{{ row.warehouse.branch.name }}</td>
+        <td>{{ row.quantity }}</td><td>{% if row.unit_cost is not None %}{{ row.unit_cost }}{% else %}Unknown{% endif %}</td>
+        <td>{% if row.value is not None %}{{ row.value }}{% else %}Unknown{% endif %}</td><td>{{ row.exception|default:'—' }}</td>
+    </tr>{% empty %}<tr><td colspan="8">No valuation positions match these filters.</td></tr>{% endfor %}</tbody></table>
+    {% include 'components/pagination.html' with page_obj=rows %}
+</div>
+<div class="panel table-wrap">
+    <h2>Valuation event history through {{ as_of|date:'Y-m-d' }}</h2>
+    <table><thead><tr><th>Posted</th><th>SKU</th><th>Product</th><th>Warehouse</th><th>Source</th><th>Quantity change</th><th>Value change</th><th>Unit cost</th><th>Quantity after</th><th>Value after</th><th>State</th></tr></thead>
+    <tbody>{% for event in history %}<tr>
+        <td>{{ event.effective_at|date:'Y-m-d H:i' }}</td><td>{{ event.product.sku }}</td><td>{{ event.product.name }}</td>
+        <td>{{ event.warehouse.code }}</td><td>{{ event.source_model }} #{{ event.source_id }}</td>
+        <td>{{ event.quantity_change }}</td><td>{{ event.value_change }}</td><td>{{ event.unit_cost }}</td>
+        <td>{{ event.quantity_after }}</td><td>{{ event.value_after }}</td>
+        <td>{% if event.is_valued_after %}Valued{% else %}Incomplete{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="11">No valuation events match these filters.</td></tr>{% endfor %}</tbody></table>
+    {% include 'components/pagination.html' with page_obj=history page_param='history_page' %}
+</div>
+{% endblock %}

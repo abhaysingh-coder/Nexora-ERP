@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Banking / Receivables and payables</p>
+        <h1>{{ title }}</h1>
+    </div>
+    <div class="header-actions">
+        <a class="button-link" href="?party={{ selected_party }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}&amp;format=csv">Export CSV</a>
+    </div>
+</section>
+<section class="card">
+    <p>Organization: <strong>{{ organization.name }}</strong>. Includes posted invoices and active, non-reversed allocations.</p>
+    <form method="get" class="inline-form">
+        <label>{% if kind == 'receivables' %}Customer{% else %}Supplier{% endif %}
+            <select class="form-control" name="party">
+                <option value="">All</option>
+                {% for party in parties %}
+                <option value="{{ party.pk }}" {% if selected_party == party.pk|stringformat:'s' %}selected{% endif %}>{{ party.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Invoice date from <input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+        <label>To <input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+        <button class="button" type="submit">Filter</button>
+    </form>
+    {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>{% if kind == 'receivables' %}Customer{% else %}Supplier{% endif %}</th><th>Invoice</th><th>Invoice date</th><th>Due date</th><th>Original</th><th>Allocated</th><th>Outstanding</th><th>Ageing</th></tr></thead>
+        <tbody>
+        {% for row in report_rows %}
+        <tr>
+            <td>{{ row.counterparty.name }}</td><td>{{ row.invoice.invoice_number }}</td><td>{{ row.invoice.invoice_date }}</td>
+            <td>{{ row.invoice.due_date|default:'—' }}</td><td>{{ row.invoice.total_amount }}</td><td>{{ row.allocated }}</td>
+            <td>{{ row.outstanding }}</td><td>{{ row.ageing }}{% if row.days_overdue %} ({{ row.days_overdue }} days){% endif %}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8">No outstanding posted invoices match these filters.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if rows.has_other_pages %}
+    <div class="pagination">
+        {% if rows.has_previous %}<a class="button-link" href="?page={{ rows.previous_page_number }}&amp;party={{ selected_party }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous</a>{% endif %}
+        <span>Page {{ rows.number }} of {{ rows.paginator.num_pages }}</span>
+        {% if rows.has_next %}<a class="button-link" href="?page={{ rows.next_page_number }}&amp;party={{ selected_party }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
+<section class="card">
+    <h2>Unapplied {% if kind == 'receivables' %}customer advances{% else %}supplier advances{% endif %}</h2>
+    <p>Unapplied total: <strong>{{ unapplied_total }}</strong>. These amounts are held in advance accounts and do not reduce invoice balances until allocated.</p>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Counterparty</th><th>Reference</th><th>Date</th><th>Amount</th><th>Allocated</th><th>Unapplied</th><th>Details</th></tr></thead>
+        <tbody>
+        {% for advance in advances %}
+        <tr>
+            <td>{% if kind == 'receivables' %}{{ advance.customer.name }}{% else %}{{ advance.supplier.name }}{% endif %}</td>
+            <td>{{ advance.reference_number }}</td><td>{{ advance.transaction_date }}</td>
+            <td>{{ advance.amount }}</td><td>{{ advance.allocated_amount }}</td><td>{{ advance.unapplied_amount }}</td>
+            <td><a href="{% url 'bank_transaction_detail' advance.pk %}">Allocate / view history</a></td>
+        </tr>
+        {% empty %}<tr><td colspan="7">No unapplied advances match this filter.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</section>
+{% endblock %}

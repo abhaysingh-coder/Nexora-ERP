@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}New product | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Inventory</p><h1>New product</h1></div><a class="button-link" href="{% url 'inventory_home' %}">Back to inventory</a></section>
+<form method="post" class="panel form-panel">{% csrf_token %}{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}<div class="form-grid">{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><p>New products start with zero stock. Record stock through a posted purchase invoice or an authorized adjustment workflow.</p><button class="primary" type="submit">Save product</button></form>
+{% endblock %}

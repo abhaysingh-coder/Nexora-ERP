@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}New purchase order | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Purchases</p><h1>{% if order %}Edit draft purchase order{% else %}New purchase order{% endif %}</h1></div><a class="button-link" href="{% url 'purchase_order_list' %}">Back to orders</a></section>
+<form method="post" class="panel form-panel">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">
+        {% for field in form %}<label>{{ field.label }}{{ field }}{% for error in field.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>{% endfor %}
+    </div>
+    <h2>Order lines</h2>
+    {{ formset.management_form }}
+    {% for line in formset %}<fieldset class="line-form"><legend>Line {{ forloop.counter }}</legend>{% for hidden in line.hidden_fields %}{{ hidden }}{% endfor %}{% for field in line.visible_fields %}<label>{{ field.label }}{{ field }}{% for error in field.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>{% endfor %}</fieldset>{% endfor %}
+    {% for error in formset.non_form_errors %}<p class="text-warning">{{ error }}</p>{% endfor %}
+    <button class="primary" type="submit">{% if order %}Save order changes{% else %}Save draft order{% endif %}</button>
+</form>
+{% endblock %}

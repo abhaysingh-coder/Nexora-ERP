@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{% if return_record %}Edit{% else %}New{% endif %} supplier return | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Supplier return</p><h1>{% if return_record %}Edit draft{% else %}New return{% endif %}</h1></div>{% if source.receipt_number %}<a class="button-link" href="{% url 'goods_receipt_detail' source.pk %}">Receipt {{ source.receipt_number }}</a>{% else %}<a class="button-link" href="{% url 'purchase_invoice_detail' source.pk %}">Invoice {{ source.invoice_number }}</a>{% endif %}</section>
+<form method="post" class="panel">{% csrf_token %}{{ form.non_field_errors }}{{ form.warehouse }}
+<div class="stats-grid"><div class="form-group">{{ form.return_number.label_tag }}{{ form.return_number }}{{ form.return_number.errors }}</div><div class="form-group">{{ form.return_date.label_tag }}{{ form.return_date }}{{ form.return_date.errors }}</div><div class="form-group">{{ form.reference.label_tag }}{{ form.reference }}{{ form.reference.errors }}</div></div>
+<div class="form-group">{{ form.notes.label_tag }}{{ form.notes }}{{ form.notes.errors }}</div>
+<h2>Returned source lines</h2><p>Only received, unreturned quantities are eligible. Invoiced quantities should be returned from their posted supplier invoice.</p>
+<div class="table-wrap"><table><thead><tr><th>Product</th><th>Available</th><th>Return quantity</th><th>Reason</th><th>Condition</th></tr></thead><tbody>{% for item in line_fields %}<tr><td>{{ item.product.sku }} — {{ item.product.name }}</td><td>{{ item.remaining }}</td><td>{{ item.quantity }}{{ item.quantity.errors }}</td><td>{{ item.reason }}{{ item.reason.errors }}</td><td>{{ item.condition }}{{ item.condition.errors }}</td></tr>{% empty %}<tr><td colspan="5">No eligible quantity remains for return.</td></tr>{% endfor %}</tbody></table></div>
+<div class="header-actions"><button class="primary" type="submit">Save draft return</button><a class="button-link" href="{% if source.receipt_number %}{% url 'goods_receipt_detail' source.pk %}{% else %}{% url 'purchase_invoice_detail' source.pk %}{% endif %}">Cancel</a></div>
+</form>
+{% endblock %}

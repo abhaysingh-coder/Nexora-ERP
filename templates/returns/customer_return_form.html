@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{% if return_record %}Edit{% else %}New{% endif %} customer return | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Customer return</p><h1>{% if return_record %}Edit draft{% else %}New return{% endif %}</h1></div><a class="button-link" href="{% url 'sales_invoice_detail' invoice.pk %}">Invoice {{ invoice.invoice_number }}</a></section>
+<form method="post" class="panel">{% csrf_token %}{{ form.non_field_errors }}
+<div class="stats-grid"><div class="form-group">{{ form.return_number.label_tag }}{{ form.return_number }}{{ form.return_number.errors }}</div><div class="form-group">{{ form.return_date.label_tag }}{{ form.return_date }}{{ form.return_date.errors }}</div><div class="form-group">{{ form.reference.label_tag }}{{ form.reference }}{{ form.reference.errors }}</div><div class="form-group">{{ form.warehouse.label_tag }}{{ form.warehouse }}{{ form.warehouse.errors }}</div></div>
+<div class="form-group">{{ form.notes.label_tag }}{{ form.notes }}{{ form.notes.errors }}</div>
+<h2>Returned invoice lines</h2><p>Enter only returned quantities. Restocking is optional and applies only to sellable units.</p>
+<div class="table-wrap"><table><thead><tr><th>Product</th><th>Sold</th><th>Return quantity</th><th>Reason</th><th>Condition</th><th>Restock</th></tr></thead><tbody>{% for item in line_fields %}<tr><td>{{ item.line.product.sku }} — {{ item.line.product.name }}</td><td>{{ item.line.quantity }}</td><td>{{ item.quantity }}{{ item.quantity.errors }}</td><td>{{ item.reason }}{{ item.reason.errors }}</td><td>{{ item.condition }}{{ item.condition.errors }}</td><td>{{ item.restock }}{{ item.restock.errors }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="header-actions"><button class="primary" type="submit">Save draft return</button><a class="button-link" href="{% url 'sales_invoice_detail' invoice.pk %}">Cancel</a></div>
+</form>
+{% endblock %}

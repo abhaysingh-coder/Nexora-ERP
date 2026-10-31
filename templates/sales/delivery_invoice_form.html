@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Invoice delivery {{ delivery.delivery_number }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Sales invoice</p><h1>Invoice delivery {{ delivery.delivery_number }}</h1></div><a class="button-link" href="{% url 'sales_order_detail' delivery.order_id %}">Back to order</a></section>
+<div class="panel"><p>Customer: <strong>{{ delivery.order.customer.name }}</strong>. Invoice lines and quantities will be copied from the dispatched delivery and cannot be browser-submitted.</p><ul>{% for line in delivery.lines.all %}<li>{{ line.order_line.product.name }} — {{ line.quantity }} units</li>{% endfor %}</ul></div>
+<form method="post" class="panel form-panel">{% csrf_token %}{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}<div class="form-grid">{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><button class="primary" type="submit">Create draft invoice</button></form>
+{% endblock %}

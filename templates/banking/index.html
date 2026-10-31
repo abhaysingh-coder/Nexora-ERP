@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Banking | Nexora ERP{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Cash management</p>
+        <h1>Banking</h1>
+    </div>
+    <div class="header-actions">
+        {% if can_manage_banking_operations %}
+        <a class="button-link" href="{% url 'bank_account_create' %}">New account</a>
+        <a class="button-link primary" href="{% url 'bank_transaction_create' %}">New transaction</a>
+        {% endif %}
+    </div>
+</section>
+
+<div class="stats-grid">
+    <div class="stat-card accent-blue">
+        <span>Accounts</span>
+        <strong>{{ accounts.count }}</strong>
+    </div>
+    <div class="stat-card accent-green">
+        <span>Posted</span>
+        <strong>{{ transactions.paginator.count }}</strong>
+    </div>
+    <div class="stat-card accent-purple">
+        <span>Available cash</span>
+        <strong>{{ accounts.0.current_balance|default:'0.00' }}</strong>
+    </div>
+</div>
+
+<div class="panel-grid">
+    <div class="panel">
+        <h2>Accounts</h2>
+        <ul class="list-stack">
+            {% for account in accounts %}
+            <li>
+                <span>{{ account.name }}</span>
+                <strong>{{ account.current_balance }}</strong>
+            </li>
+            {% empty %}
+            <li>No bank accounts configured.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="panel">
+        <h2>Recent transactions</h2>
+        <ul class="list-stack">
+            {% for transaction in transactions %}
+            <li>
+                <a href="{% url 'bank_transaction_detail' transaction.pk %}">{{ transaction.reference_number }}</a>
+                <small>{{ transaction.amount }}</small>
+            </li>
+            {% empty %}
+            <li>No bank activity yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

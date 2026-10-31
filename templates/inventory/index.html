@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Inventory | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Stock control</p><h1>Inventory</h1></div>
+    <div class="header-actions">
+        <a class="button-link" href="{% url 'inventory_valuation' %}">Valuation report</a>
+        {% if can_manage %}
+            <a class="button-link" href="{% url 'inventory_opening_valuation' %}">Opening valuation</a>
+            <a class="button-link" href="{% url 'warehouse_create' %}">New warehouse</a>
+            <a class="button-link" href="{% url 'stock_adjustment' %}">Adjust stock</a>
+            <a class="button-link" href="{% url 'stock_transfer' %}">Transfer stock</a>
+            <a class="button-link primary" href="{% url 'product_create' %}">New product</a>
+        {% endif %}
+    </div>
+</section>
+<div class="panel"><h2>Warehouses</h2><div class="warehouse-list">{% for warehouse in warehouses %}<span>{{ warehouse.code }} — {{ warehouse.name }} ({{ warehouse.branch.name }})</span>{% empty %}<span>No warehouses configured.</span>{% endfor %}</div></div>
+<form method="get" class="panel filter-form">
+    <label>Search SKU/product<input class="form-control" name="q" value="{{ query }}"></label>
+    <label>Warehouse<select class="form-control" name="warehouse"><option value="">Organization/branch total</option>{% for warehouse in warehouses %}<option value="{{ warehouse.pk }}" {% if selected_warehouse.pk == warehouse.pk %}selected{% endif %}>{{ warehouse.code }} — {{ warehouse.name }}</option>{% endfor %}</select></label>
+    <label class="check-label"><input type="checkbox" name="low" value="1" {% if low_stock %}checked{% endif %}> Low stock only</label>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<div class="panel table-wrap">
+    <h2>Products and stock</h2>
+    <p>Weighted-average cost is shown only when all stock in the selected scope has a complete valuation. Product cost price is not used as inventory value.</p>
+    <table><thead><tr><th>SKU</th><th>Product</th><th>Category</th><th>Unit</th><th>Available qty</th><th>Weighted average cost</th><th>Inventory value</th><th>Reorder at</th><th>State</th></tr></thead>
+    <tbody>{% for product in products %}<tr>
+        <td>{{ product.sku }}</td><td>{{ product.name }}</td><td>{{ product.category|default:'—' }}</td><td>{{ product.unit }}</td>
+        <td>{{ product.available_quantity }}</td>
+        <td>{% if product.valuation_complete %}{{ product.average_unit_cost|default:'0.000000' }}{% else %}Unknown{% endif %}</td>
+        <td>{% if product.valuation_complete %}{{ product.inventory_value|default:'0.00' }}{% else %}Unknown{% endif %}</td>
+        <td>{{ product.reorder_level }}</td>
+        <td>{% if not product.valuation_complete %}<strong class="text-warning">Valuation needed</strong>{% elif product.available_quantity <= product.reorder_level %}<strong class="text-warning">Reorder</strong>{% else %}In stock{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="9">No products found.</td></tr>{% endfor %}</tbody></table>
+    {% include 'components/pagination.html' with page_obj=products %}
+</div>
+<div class="panel table-wrap">
+    <h2>Recent stock movements</h2>
+    <table><thead><tr><th>Date</th><th>Product</th><th>Warehouse</th><th>Type</th><th>Quantity</th><th>Unit cost</th><th>Valuation change</th><th>Reference</th></tr></thead>
+    <tbody>{% for movement in movements %}<tr>
+        <td>{{ movement.created_at|date:'Y-m-d H:i' }}</td><td>{{ movement.product.name }}</td><td>{{ movement.warehouse.name }}</td>
+        <td>{{ movement.get_movement_type_display }}</td><td>{{ movement.quantity }}</td><td>{{ movement.unit_cost }}</td>
+        <td>{{ movement.valuation_entry.value_change|default:'Unknown' }}</td><td>{{ movement.reference_model }} {{ movement.reference_id|default:'' }}</td>
+    </tr>{% empty %}<tr><td colspan="8">No stock movements recorded.</td></tr>{% endfor %}</tbody></table>
+    {% include 'components/pagination.html' with page_obj=movements %}
+</div>
+{% endblock %}

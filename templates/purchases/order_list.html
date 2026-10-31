@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Purchase orders | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Purchases</p><h1>Purchase orders</h1></div>
+    {% if can_manage %}<a class="button-link primary" href="{% url 'purchase_order_create' %}">New purchase order</a>{% endif %}
+</section>
+<div class="header-actions" style="margin-bottom:16px">
+    <a class="button-link" href="{% url 'purchase_invoice_list' %}">Purchase invoices</a>
+</div>
+<form method="get" class="panel filter-form">
+    <label>Search order/supplier<input class="form-control" name="q" value="{{ query }}"></label>
+    <label>Status<select class="form-control" name="status"><option value="">All</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="primary" type="submit">Filter</button>
+</form>
+<div class="panel table-wrap">
+    <table><thead><tr><th>Order</th><th>Date</th><th>Supplier</th><th>Branch</th><th>Status</th><th>Before tax</th></tr></thead>
+        <tbody>{% for order in orders %}<tr><td><a href="{% url 'purchase_order_detail' order.pk %}">{{ order.order_number }}</a></td><td>{{ order.order_date }}</td><td>{{ order.supplier.name }}</td><td>{{ order.branch.name }}</td><td>{{ order.get_status_display }}</td><td>{{ order.total_before_tax }}</td></tr>{% empty %}<tr><td colspan="6">No purchase orders match these filters.</td></tr>{% endfor %}</tbody>
+    </table>
+    {% include 'components/pagination.html' with page_obj=orders %}
+</div>
+{% endblock %}

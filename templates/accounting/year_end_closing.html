@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Year-end closing | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Accounting / Financial controls</p>
+        <h1>Year-end closing: {{ year.name }}</h1>
+        <p>{{ year.starts_on }} through {{ year.ends_on }} · {{ organization.name }}</p>
+    </div>
+    <div class="header-actions">
+        <a class="button-link" href="?format=csv">Export opening balances CSV</a>
+        <a class="button-link button-secondary" href="{% url 'accounting_periods' %}">Back to periods</a>
+    </div>
+</section>
+
+{% if preview.existing and preview.existing.status == 'closed' %}
+<section class="card">
+    <h2>Closed {{ preview.existing.closed_at }}</h2>
+    <p>Closed by {{ preview.existing.closed_by|default:'System user' }}. This close cannot be reopened through the application.</p>
+    <p>Reason: {{ preview.existing.reason }}</p>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Readiness checklist</h2>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Check</th><th>Result</th><th>Details</th></tr></thead>
+        <tbody>
+        {% for check in preview.checks %}
+        <tr>
+            <td>{{ check.label }}</td>
+            <td>{% if check.passed %}Ready{% else %}Needs attention{% endif %}</td>
+            <td>{{ check.detail }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="3">No checklist items are available.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if preview.errors %}
+    <div class="notice notice-error">
+        <strong>Closing is not ready:</strong>
+        <ul>{% for error in preview.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+</section>
+
+<section class="panel-grid">
+    <div class="card">
+        <h2>Ledger summary</h2>
+        <p>Cumulative trial balance through year end</p>
+        <p>Debits: <strong>{{ preview.trial_debit }}</strong></p>
+        <p>Credits: <strong>{{ preview.trial_credit }}</strong></p>
+        <p>Current-year profit / (loss): <strong>{{ preview.profit }}</strong></p>
+        <p>Positive amounts are profit; negative amounts are loss. The balancing adjustment is posted to retained earnings, grouped by branch.</p>
+    </div>
+    <div class="card">
+        <h2>Income and expense accounts</h2>
+        <div class="table-wrap"><table>
+            <thead><tr><th>Branch</th><th>Code / account</th><th>Type</th><th>Debit</th><th>Credit</th></tr></thead>
+            <tbody>
+            {% for row in preview.pnl_rows %}
+            <tr>
+                <td>{{ row.branch_name }}</td>
+                <td>{{ row.code }} — {{ row.name }}</td>
+                <td>{{ row.account_type }}</td>
+                <td>{{ row.debit }}</td><td>{{ row.credit }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="5">No posted income or expense balances require closing.</td></tr>{% endfor %}
+            </tbody>
+        </table></div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Proposed next-year opening balances</h2>
+    <p>Only asset, liability and equity accounts are carried forward. Current-year profit or loss is included once in retained earnings.</p>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Branch</th><th>Code / account</th><th>Account type</th><th>Debit</th><th>Credit</th><th>Net debit balance</th></tr></thead>
+        <tbody>
+        {% for row in preview.opening_rows %}
+        <tr>
+            <td>{{ row.branch_name }}</td>
+            <td>{{ row.code }} — {{ row.name }}</td>
+            <td>{{ row.account_type }}</td>
+            <td>{{ row.debit }}</td><td>{{ row.credit }}</td><td>{{ row.balance }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="6">No nonzero balance-sheet balances to carry forward.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</section>
+
+<section class="card">
+    <h2>Closing journals and audit history</h2>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Purpose</th><th>Reference</th><th>Date</th><th>Branch</th><th>Debits</th><th>Credits</th></tr></thead>
+        <tbody>
+        {% for link in preview.existing_journals %}
+        <tr>
+            <td>{{ link.get_role_display }}</td>
+            <td>{{ link.journal_entry.reference }}</td>
+            <td>{{ link.journal_entry.entry_date }}</td>
+            <td>{{ link.branch.name|default:'Organization-wide' }}</td>
+            <td>{{ link.journal_entry.total_debit }}</td>
+            <td>{{ link.journal_entry.total_credit }}</td>
+        </tr>
+        <tr><td colspan="6">
+            <ul class="list-stack">
+                {% for line in link.journal_entry.lines.all %}
+                <li>{{ line.account.code }} — {{ line.account.name }}: debit {{ line.debit }}, credit {{ line.credit }}</li>
+                {% endfor %}
+            </ul>
+        </td></tr>
+        {% empty %}<tr><td colspan="6">No year-end journals have been generated.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if preview.existing %}
+        {% for event in preview.existing.audit_events.all %}
+        <p>{{ event.get_action_display }} by {{ event.user|default:'System user' }} at {{ event.created_at }} — {{ event.reason }}</p>
+        {% if event.journal_references %}<p>Journal references: {{ event.journal_references }}</p>{% endif %}
+        {% endfor %}
+    {% endif %}
+</section>
+
+{% if not preview.existing or preview.existing.status != 'closed' %}
+<section class="card">
+    <h2>Review or confirm close</h2>
+    <p>Preview and validation do not alter financial records. Confirmation is irreversible in this interface and requires all checks to pass.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+        <label>{{ field.label }} {{ field }}{{ field.errors }}</label>
+        {% endfor %}
+        <div class="header-actions">
+            <button class="button button-secondary" type="submit" name="action" value="preview">Preview</button>
+            <button class="button button-secondary" type="submit" name="action" value="validate">Validate readiness</button>
+            <button class="button" type="submit" name="action" value="confirm" {% if not can_confirm %}disabled{% endif %}>Confirm year-end close</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

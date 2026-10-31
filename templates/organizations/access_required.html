@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}Organization access required · Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><h1>Organization access required</h1><p>This account does not have an active organization membership for the requested workspace.</p></div></section>
+<section class="panel">
+    {% if user.is_superuser %}
+    <p>Create or activate an organization, then assign this user an organization membership in Django administration.</p>
+    <p><a class="button primary" href="{% url 'admin:organizations_organization_changelist' %}">Manage organizations</a></p>
+    {% else %}
+    <p>Contact your organization administrator and ask them to assign an active organization membership. Access is not granted automatically.</p>
+    {% endif %}
+</section>
+{% endblock %}

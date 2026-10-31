@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}New sales invoice | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Sales</p><h1>New draft sales invoice</h1></div><a class="button-link" href="{% url 'sales_invoice_list' %}">Back to invoices</a></section>
+<form method="post" class="panel form-panel">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div>
+    <h2>Invoice lines</h2>
+    {{ formset.management_form }}
+    {% for line in formset %}<fieldset class="line-form"><legend>Line {{ forloop.counter }}</legend>{{ line.id }}{% for field in line.visible_fields %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</fieldset>{% endfor %}
+    {% if formset.non_form_errors %}<div class="message error">{{ formset.non_form_errors }}</div>{% endif %}
+    <button class="primary" type="submit">Save draft</button>
+</form>
+{% endblock %}

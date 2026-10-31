@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Taxation | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><h1>GST &amp; Taxation</h1><p>Tax setup and posted transaction summaries for {{ organization.name }}.</p></div>
+</section>
+<section class="card">
+    <h2>Configuration</h2>
+    <div class="button-row">
+        <a class="button" href="{% url 'tax_code_create' %}">New tax code</a>
+        <a class="button" href="{% url 'tax_rate_create' %}">New tax rate</a>
+        <a class="button" href="{% url 'tax_registration_create' %}">GST registration</a>
+        <a class="button" href="{% url 'product_tax_classification_create' %}">Classify product</a>
+    </div>
+    <h3>Tax codes</h3>
+    <div class="table-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Active</th></tr></thead><tbody>
+        {% for code in tax_codes %}<tr><td>{{ code.code }}</td><td>{{ code.name }}</td><td>{{ code.get_category_display }}</td><td>{{ code.is_active|yesno:"Yes,No" }}</td></tr>
+        {% empty %}<tr><td colspan="4">No tax codes configured.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+<section class="card">
+    <h2>Effective tax rates</h2>
+    <div class="table-wrap"><table><thead><tr><th>Tax code</th><th>Component</th><th>Rate (%)</th><th>State</th><th>Effective</th></tr></thead><tbody>
+        {% for rate in rates %}<tr><td>{{ rate.tax_code.code }}</td><td>{{ rate.get_tax_type_display }}</td><td>{{ rate.rate }}</td><td>{{ rate.state_code|default:"All states" }}</td><td>{{ rate.effective_from }} – {{ rate.effective_to|default:"Open" }}</td></tr>
+        {% empty %}<tr><td colspan="5">No effective tax rates configured.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+<section class="card">
+    <h2>GST registrations and product classifications</h2>
+    <div class="table-wrap"><table><thead><tr><th>Branch</th><th>GSTIN</th><th>State</th><th>Registered</th></tr></thead><tbody>
+        {% for registration in registrations %}<tr><td>{{ registration.branch|default:"Organization" }}</td><td>{{ registration.gstin|default:"—" }}</td><td>{{ registration.state_code|default:"—" }}</td><td>{{ registration.is_registered|yesno:"Yes,No" }}</td></tr>
+        {% empty %}<tr><td colspan="4">No GST registrations configured.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Tax code</th><th>HSN/SAC</th><th>Classification</th></tr></thead><tbody>
+        {% for classification in classifications %}<tr><td>{{ classification.product.name }}</td><td>{{ classification.tax_code.code }}</td><td>{{ classification.hsn_sac|default:"—" }}</td><td>{% if classification.is_exempt %}Exempt{% elif classification.is_zero_rated %}Zero-rated{% else %}Taxable{% endif %}</td></tr>
+        {% empty %}<tr><td colspan="4">No product tax classifications configured.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+<section class="card">
+    <h2>Reports</h2>
+    <form method="get" class="inline-form">
+        <label>From <input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+        <label>To <input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+        <button class="button" type="submit">Filter</button>
+    </form>
+    <div class="button-row">
+        <a class="button" href="{% url 'sales_tax_register' %}">Sales tax register</a>
+        <a class="button" href="{% url 'purchase_tax_register' %}">Purchase tax register</a>
+        <a class="button" href="{% url 'output_tax_summary' %}">Output-tax summary</a>
+        <a class="button" href="{% url 'input_tax_summary' %}">Input-tax summary</a>
+        <a class="button" href="{% url 'tax_liability_summary' %}">Tax liability</a>
+        <a class="button" href="{% url 'tax_register_csv' %}?start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Export CSV</a>
+    </div>
+    <h3>Recent tax transactions</h3>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Kind</th><th>Document</th><th>Tax code</th><th>Taxable value</th><th>Tax</th></tr></thead><tbody>
+        {% for transaction in transactions %}<tr><td>{{ transaction.transaction_date }}</td><td>{{ transaction.get_transaction_kind_display }}</td><td>{{ transaction.source_model }} #{{ transaction.source_id }}</td><td>{{ transaction.tax_code.code }}</td><td>{{ transaction.taxable_value }}</td><td>{{ transaction.total_tax }}</td></tr>
+        {% empty %}<tr><td colspan="6">No posted tax transactions found for this period.</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if transactions.has_other_pages %}
+    <div class="pagination">
+        {% if transactions.has_previous %}<a class="button-link" href="?page={{ transactions.previous_page_number }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous</a>{% endif %}
+        <span>Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
+        {% if transactions.has_next %}<a class="button-link" href="?page={{ transactions.next_page_number }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

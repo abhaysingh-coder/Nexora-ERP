@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Select organization · Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><h1>Select organization</h1><p>Choose an active organization you are authorized to access.</p></div>
+</section>
+<section class="panel form-panel">
+    {% if active_organization %}<p>Current organization: <strong>{{ active_organization.name }}</strong></p>{% endif %}
+    {% if form.fields.organization.queryset %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+        <div class="form-field"><label for="{{ form.organization.id_for_label }}">{{ form.organization.label }}</label>{{ form.organization }}{{ form.organization.errors }}</div>
+        <button class="button primary" type="submit">Open organization</button>
+    </form>
+    {% else %}
+    <p>No active organization is currently available to this account. Ask an organization administrator to provision membership.</p>
+    {% endif %}
+</section>
+{% endblock %}

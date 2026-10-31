@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Receive {{ order.order_number }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Goods receipt · {{ order.order_number }}</p><h1>{% if receipt %}Edit draft receipt{% else %}Record received goods{% endif %}</h1></div><a class="button-link" href="{% url 'purchase_order_detail' order.pk %}">Back to order</a></section>
+<form method="post" class="panel form-panel">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">
+        <label>{{ form.receipt_number.label }}{{ form.receipt_number }}{% for error in form.receipt_number.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+        <label>{{ form.receipt_date.label }}{{ form.receipt_date }}{% for error in form.receipt_date.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+        <label>{{ form.warehouse.label }}{{ form.warehouse }}{% for error in form.warehouse.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+    </div>
+    <h2>Received quantities</h2>
+    {% for line, field in line_fields %}<div class="line-form"><div><strong>{{ line.product.sku }} — {{ line.product.name }}</strong><p>Ordered {{ line.quantity }} · cost {{ line.unit_cost }}</p></div><label>{{ field.label }}{{ field }}{% for error in field.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label></div>{% endfor %}
+    <button class="primary" type="submit">{% if receipt %}Save receipt changes{% else %}Save draft receipt{% endif %}</button>
+</form>
+{% endblock %}

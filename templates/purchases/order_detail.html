@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Purchase order {{ order.order_number }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Purchase order</p><h1>{{ order.order_number }}</h1></div>
+    <div class="header-actions"><a class="button-link" href="{% url 'purchase_order_list' %}">All orders</a>{% if can_manage and order.status == 'draft' %}<a class="button-link" href="{% url 'purchase_order_edit' order.pk %}">Edit draft</a>{% endif %}{% if can_manage and order.status == 'confirmed' or can_manage and order.status == 'partially_received' %}<a class="button-link primary" href="{% url 'goods_receipt_create' order.pk %}">Create goods receipt</a>{% endif %}</div>
+</section>
+<section class="panel">
+    <div class="stats-grid">
+        <div class="stat-card"><span>Supplier</span><strong style="font-size:1.1rem">{{ order.supplier.name }}</strong></div>
+        <div class="stat-card"><span>Branch</span><strong style="font-size:1.1rem">{{ order.branch.name }}</strong></div>
+        <div class="stat-card"><span>Order date</span><strong style="font-size:1.1rem">{{ order.order_date }}</strong></div>
+        <div class="stat-card"><span>Status</span><strong style="font-size:1.1rem">{{ order.get_status_display }}</strong></div>
+    </div>
+    {% if can_manage %}<div class="header-actions">
+        {% if order.status == 'draft' %}<form method="post">{% csrf_token %}<button class="primary" name="action" value="confirm">Confirm order</button></form>{% endif %}
+        {% if order.status == 'draft' or order.status == 'confirmed' %}<form method="post">{% csrf_token %}<button name="action" value="cancel">Cancel order</button></form>{% endif %}
+    </div>{% endif %}
+</section>
+<section class="panel table-wrap">
+    <h2>Order lines</h2>
+    <table><thead><tr><th>Product</th><th>Ordered</th><th>Unit cost</th><th>Discount</th><th>Received</th><th>Outstanding</th></tr></thead>
+        <tbody>{% for row in line_rows %}<tr><td>{{ row.line.product.sku }} — {{ row.line.product.name }}</td><td>{{ row.line.quantity }}</td><td>{{ row.line.unit_cost }}</td><td>{{ row.line.discount_amount }}</td><td>{{ row.received }}</td><td>{{ row.remaining }}</td></tr>{% empty %}<tr><td colspan="6">No order lines.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+<section class="panel table-wrap">
+    <h2>Goods receipts</h2>
+    <table><thead><tr><th>Receipt</th><th>Date</th><th>Warehouse</th><th>Status</th></tr></thead>
+        <tbody>{% for receipt in receipts %}<tr><td><a href="{% url 'goods_receipt_detail' receipt.pk %}">{{ receipt.receipt_number }}</a></td><td>{{ receipt.receipt_date }}</td><td>{{ receipt.warehouse.name }}</td><td>{{ receipt.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4">No receipts recorded.</td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endblock %}

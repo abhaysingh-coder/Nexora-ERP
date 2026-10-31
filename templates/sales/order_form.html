@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}New sales order | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Sales</p><h1>New sales order</h1></div><a class="button-link" href="{% url 'sales_order_list' %}">Back to orders</a></section>
+<form method="post" class="panel form-panel">{% csrf_token %}{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}<div class="form-grid">{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><h2>Order lines</h2>{{ formset.management_form }}{% if formset.non_form_errors %}<div class="message error">{{ formset.non_form_errors }}</div>{% endif %}<div class="table-wrap"><table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Discount</th></tr></thead><tbody>{% for line in formset %}<tr><td>{{ line.product }}{{ line.product.errors }}</td><td>{{ line.quantity }}{{ line.quantity.errors }}</td><td>{{ line.unit_price }}{{ line.unit_price.errors }}</td><td>{{ line.discount_amount }}{{ line.discount_amount.errors }}{{ line.id }}{{ line.DELETE.as_hidden }}</td></tr>{% endfor %}</tbody></table></div><button class="primary" type="submit">Save draft order</button></form>
+{% endblock %}

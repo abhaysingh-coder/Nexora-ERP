@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><h1>{{ title }}</h1><p>Summed from posted tax transaction snapshots for {{ organization.name }}.</p></div></section>
+<section class="card">
+    <form method="get" class="inline-form">
+        <label>From <input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+        <label>To <input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+        <button class="button" type="submit">Filter</button>
+    </form>
+    <div class="table-wrap"><table><tbody>
+        <tr><th>Taxable value</th><td>{{ totals.taxable|default:"0.00" }}</td></tr>
+        <tr><th>CGST</th><td>{{ totals.cgst|default:"0.00" }}</td></tr>
+        <tr><th>SGST</th><td>{{ totals.sgst|default:"0.00" }}</td></tr>
+        <tr><th>IGST</th><td>{{ totals.igst|default:"0.00" }}</td></tr>
+        <tr><th>UTGST</th><td>{{ totals.utgst|default:"0.00" }}</td></tr>
+        <tr><th>Cess</th><td>{{ totals.cess|default:"0.00" }}</td></tr>
+        <tr><th>Total tax</th><td>{{ totals.tax|default:"0.00" }}</td></tr>
+    </tbody></table></div>
+</section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Invoice receipt {{ receipt.receipt_number }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Supplier invoice · {{ receipt.receipt_number }}</p><h1>Create invoice from receipt</h1></div><a class="button-link" href="{% url 'goods_receipt_detail' receipt.pk %}">Back to receipt</a></section>
+<form method="post" class="panel form-panel">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">
+        {% for field in form %}{% if field.name == 'invoice_number' or field.name == 'invoice_date' or field.name == 'due_date' or field.name == 'place_of_supply' %}<label>{{ field.label }}{{ field }}{% for error in field.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>{% endif %}{% endfor %}
+    </div>
+    <h2>Supplier invoice lines</h2>
+    {% for row in line_fields %}<fieldset class="line-form"><legend>{{ row.line.order_line.product.sku }} — {{ row.line.order_line.product.name }}</legend>
+        <label>{{ row.quantity.label }}{{ row.quantity }}{% for error in row.quantity.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+        <label>{{ row.unit_cost.label }}{{ row.unit_cost }}{% for error in row.unit_cost.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+        <label>{{ row.discount.label }}{{ row.discount }}{% for error in row.discount.errors %}<small class="text-warning">{{ error }}</small>{% endfor %}</label>
+    </fieldset>{% endfor %}
+    <p>Quantities are limited to posted receipt quantities that are not already covered by posted supplier invoices.</p>
+    <button class="primary" type="submit">Save draft invoice</button>
+</form>
+{% endblock %}

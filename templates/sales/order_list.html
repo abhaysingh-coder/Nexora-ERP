@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Sales orders | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Sales</p><h1>Sales orders</h1></div>{% if can_manage %}<a class="button-link primary" href="{% url 'sales_order_create' %}">New sales order</a>{% endif %}</section>
+<form method="get" class="panel filter-form"><label>Search<input class="form-control" name="q" value="{{ query }}"></label><label>Status<select class="form-control" name="status"><option value="">All</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="primary" type="submit">Filter</button></form>
+<div class="panel table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Branch</th><th>Status</th></tr></thead><tbody>{% for order in orders %}<tr><td><a href="{% url 'sales_order_detail' order.pk %}">{{ order.order_number }}</a></td><td>{{ order.order_date }}</td><td>{{ order.customer.name }}</td><td>{{ order.branch.name }}</td><td>{{ order.get_status_display }}</td></tr>{% empty %}<tr><td colspan="5">No sales orders match the selected filters.</td></tr>{% endfor %}</tbody></table>{% include 'components/pagination.html' with page_obj=orders %}</div>
+{% endblock %}

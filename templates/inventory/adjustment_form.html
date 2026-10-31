@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}Stock adjustment | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Inventory control</p><h1>Stock adjustment</h1></div><a class="button-link" href="{% url 'inventory_home' %}">Back to inventory</a></section>
+<form method="post" class="panel form-panel">{% csrf_token %}{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}<p>Enter an approved unit cost when adding stock. A negative adjustment uses the current weighted-average cost and posts the corresponding inventory adjustment journal. The reference makes retries idempotent.</p><div class="form-grid">{% for field in form %}<label>{{ field.label }}{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}</div><button class="primary" type="submit">Record adjustment</button></form>
+{% endblock %}

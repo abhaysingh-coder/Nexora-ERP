@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Journal {{ entry.reference }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Accounting journal</p><h1>{{ entry.reference }}</h1></div><a class="button-link" href="{% url 'general_ledger' %}">General ledger</a></section>
+<section class="panel"><div class="stats-grid"><div class="stat-card"><span>Date</span><strong>{{ entry.entry_date }}</strong></div><div class="stat-card"><span>Status</span><strong>{{ entry.get_status_display }}</strong></div><div class="stat-card"><span>Branch</span><strong>{{ entry.branch|default:'Organization wide' }}</strong></div><div class="stat-card"><span>Narration</span><strong>{{ entry.narration }}</strong></div></div></section>
+<section class="panel table-wrap"><table><thead><tr><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th></tr></thead><tbody>{% for line in lines %}<tr><td>{{ line.account.code }} — {{ line.account.name }}</td><td>{{ line.description }}</td><td>{{ line.debit }}</td><td>{{ line.credit }}</td></tr>{% endfor %}</tbody><tfoot><tr><th colspan="2">Total</th><th>{{ entry.total_debit }}</th><th>{{ entry.total_credit }}</th></tr></tfoot></table></section>
+{% endblock %}

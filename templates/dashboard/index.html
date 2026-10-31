@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard | Nexora ERP{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">BUSINESS OVERVIEW</p>
+        <h1>Good to see you, {{ user.get_short_name|default:user.username }}</h1>
+        <p class="page-subtitle">Here’s what’s happening across your workspace.</p>
+    </div>
+    <div class="header-actions"><a class="button-link primary" href="{% url 'trial_balance' %}">Open financial reports <span aria-hidden="true">↗</span></a></div>
+</section>
+
+<div class="stats-grid">
+    <div class="stat-card accent-blue">
+        <span class="stat-label">Posted sales</span>
+        <strong>{{ sales_total|default:'0.00' }}</strong>
+        <small>All posted invoices</small>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Posted purchases</span>
+        <strong>{{ purchase_total|default:'0.00' }}</strong>
+        <small>All posted invoices</small>
+    </div>
+    <div class="stat-card accent-purple">
+        <span class="stat-label">Cash and bank</span>
+        <strong>{{ cash_balance|default:'0.00' }}</strong>
+        <small>Current account balances</small>
+    </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">Low stock</span>
+        <strong>{{ low_stock_count|default:'0' }}</strong>
+        <small>Items at or below reorder level</small>
+    </div>
+</div>
+
+<div class="panel-grid">
+    <div class="panel activity-panel">
+        <div class="panel-heading"><div><p class="eyebrow">LEDGER</p><h2>Recent journal activity</h2></div><a href="{% url 'general_ledger' %}">View ledger <span aria-hidden="true">→</span></a></div>
+        <ul class="list-stack">
+            {% for entry in recent_movements %}
+                <li>
+                    <span class="activity-mark">▤</span><span class="activity-copy"><strong>{{ entry.reference }}</strong><small>{{ entry.narration|default:'Journal entry' }}</small></span>
+                    <time datetime="{{ entry.entry_date|date:'Y-m-d' }}">{{ entry.entry_date|date:'d M Y' }}</time>
+                </li>
+            {% empty %}
+                <li class="empty-state">No posted journal entries yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="panel snapshot-panel">
+        <div class="panel-heading"><div><p class="eyebrow">WORKING CAPITAL</p><h2>Business snapshot</h2></div></div>
+        <ul class="list-stack">
+            <li><span>Known inventory value</span><strong>{{ inventory_value|default:'0.00' }}</strong></li>
+            {% if not inventory_value_complete %}<li class="valuation-warning"><span>Valuation exceptions</span><strong>{{ inventory_valuation_exceptions }}</strong></li>{% endif %}
+            <li><span>Receivables</span><strong>{{ receivables|default:'0.00' }}</strong></li>
+            <li><span>Payables</span><strong>{{ payables|default:'0.00' }}</strong></li>
+        </ul>
+        <a class="text-link" href="{% url 'inventory_valuation' %}">Review inventory valuation <span aria-hidden="true">→</span></a>
+    </div>
+</div>
+
+<section class="quick-actions">
+    <div><p class="eyebrow">GET STARTED</p><h2>Quick actions</h2><p class="page-subtitle">Jump into a common workflow.</p></div>
+    <div class="action-grid">
+        <a class="action-card" href="{% url 'sales_invoice_list' %}"><span class="action-icon sales-icon">↗</span><span><strong>Sales invoices</strong><small>Create or review customer invoices</small></span><span class="action-arrow">→</span></a>
+        <a class="action-card" href="{% url 'purchase_order_list' %}"><span class="action-icon purchase-icon">↙</span><span><strong>Purchase orders</strong><small>Order and receive supplier goods</small></span><span class="action-arrow">→</span></a>
+        <a class="action-card" href="{% url 'banking_home' %}"><span class="action-icon banking-icon">▣</span><span><strong>Banking</strong><small>Record or reconcile transactions</small></span><span class="action-arrow">→</span></a>
+    </div>
+</section>
+{% endblock %}

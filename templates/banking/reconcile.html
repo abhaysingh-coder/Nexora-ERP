@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Reconciliation | Nexora ERP{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Banking</p>
+        <h1>Reconciliation</h1>
+    </div>
+</section>
+
+<div class="panel-grid">
+    <div class="panel">
+        <h2>Unreconciled posted transactions</h2>
+        <ul class="list-stack">
+            {% for transaction in transactions %}
+            <li>
+                <span>{{ transaction.reference_number }} · {{ transaction.account.name }} · {{ transaction.transaction_date }} · {{ transaction.amount }}</span>
+            </li>
+            {% empty %}
+            <li>No unreconciled posted transactions.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="panel">
+        <h2>Confirm statement matches</h2>
+        <p>Suggestions are based on account, amount direction, date (within {{ suggestion_days }} days), reference and counterparty text. They are suggestions only; choose a transaction and confirm it. Confirmation still requires the exact account, date and signed amount.</p>
+        {% if not can_manage_banking_operations %}<p class="message">You can review reconciliation data, but matching requires an authorized finance role.</p>{% endif %}
+        <ul class="list-stack">
+            {% for item in statement_lines %}
+            {% with line=item.line %}
+            <li class="reconciliation-row">
+                <span>{{ line.reference }} · {{ line.account.name }} · {{ line.statement_date }} · {{ line.amount }}</span>
+                {% if item.suggestions %}
+                <div class="message">
+                    <strong>Suggested matches</strong>
+                    {% for suggestion in item.suggestions %}
+                    <p>{{ suggestion.transaction.reference_number }} — {{ suggestion.confidence }}% confidence:
+                        {{ suggestion.reasons|join:', ' }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if can_manage_banking_operations %}<form method="post" class="inline-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="statement_line_id" value="{{ line.pk }}">
+                    <label for="transaction-{{ line.pk }}">ERP transaction</label>
+                    <select class="form-control" id="transaction-{{ line.pk }}" name="transaction_id" required>
+                        <option value="">Select transaction to confirm</option>
+                        {% for transaction in transactions %}
+                        <option value="{{ transaction.pk }}">{{ transaction.reference_number }} · {{ transaction.account.name }} · {{ transaction.transaction_date }} · {{ transaction.amount }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Confirm match</button>
+                </form>{% endif %}
+            </li>
+            {% endwith %}
+            {% empty %}
+            <li>No unmatched statement lines. Import a statement to begin reconciliation.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="panel">
+        <h2>Recently reconciled</h2>
+        <ul class="list-stack">
+            {% for transaction in reconciled_transactions %}
+            <li>
+                <span>{{ transaction.reference_number }} · {{ transaction.account.name }} · {{ transaction.transaction_date }} · {{ transaction.amount }}</span>
+                {% if transaction.statement_match %}<small>Statement: {{ transaction.statement_match.reference }} ({{ transaction.statement_match.statement_date }})</small>{% endif %}
+                {% if can_manage_banking_operations %}<form method="post" action="{% url 'bank_unreconcile' transaction.pk %}" class="inline-form">
+                    {% csrf_token %}
+                    <label>Reason <input class="form-control" name="reason" maxlength="255" required></label>
+                    <button class="button button-secondary" type="submit">Undo reconciliation</button>
+                </form>{% endif %}
+            </li>
+            {% empty %}<li>No recently reconciled transactions.</li>{% endfor %}
+        </ul>
+    </div>
+    <div class="panel">
+        <h2>Recent imports</h2>
+        <ul class="list-stack">
+            {% for import in imports %}
+            <li>
+                <span>{{ import.file_name }}</span>
+                <small>{{ import.status }}</small>
+            </li>
+            {% empty %}
+            <li>No statement imports yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

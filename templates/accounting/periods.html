@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Financial periods | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Accounting / Controls</p><h1>Financial years and periods</h1></div>
+</section>
+{% if can_manage %}
+<section class="card">
+    <h2>Create a financial year</h2>
+    <p>Monthly periods are generated for the selected date range. Overlapping years are rejected.</p>
+    <form method="post" class="inline-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_year">
+        {{ form.non_field_errors }}
+        {% for field in form %}<label>{{ field.label }} {{ field }}{{ field.errors }}</label>{% endfor %}
+        <button class="button" type="submit">Create financial year</button>
+    </form>
+</section>
+{% endif %}
+{% for year in years %}
+<section class="card">
+    <div class="page-header">
+        <div><h2>{{ year.name }}</h2></div>
+        {% if can_manage %}
+        <a class="button-link" href="{% url 'year_end_closing' year.pk %}">Review year-end close</a>
+        {% endif %}
+    </div>
+    <p>{{ year.starts_on }} to {{ year.ends_on }} · Organization: {{ organization.name }}</p>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Period</th><th>Dates</th><th>Status</th><th>Closed by / at</th><th>Action / audit</th></tr></thead>
+        <tbody>
+        {% for period in year.periods.all %}
+        <tr>
+            <td>{{ period.name }}</td>
+            <td>{{ period.starts_on }} – {{ period.ends_on }}</td>
+            <td>{{ period.get_status_display }}</td>
+            <td>{% if period.closed_by %}{{ period.closed_by }}{% endif %}{% if period.closed_at %} / {{ period.closed_at }}{% endif %}</td>
+            <td>
+                {% if can_manage and period.status == 'open' %}
+                <form method="post">
+                    {% csrf_token %}<input type="hidden" name="action" value="close_period">
+                    <input type="hidden" name="period_id" value="{{ period.pk }}">
+                    <button class="button button-secondary" type="submit">Close period</button>
+                </form>
+                {% elif can_manage and period.status == 'closed' %}
+                <form method="post" class="inline-form">
+                    {% csrf_token %}<input type="hidden" name="action" value="reopen_period">
+                    <input type="hidden" name="period_id" value="{{ period.pk }}">
+                    <label>Reason <input class="form-control" name="reason" maxlength="255" required></label>
+                    <button class="button button-secondary" type="submit">Reopen</button>
+                </form>
+                {% endif %}
+                {% for event in period.audit_events.all %}
+                    <small>{{ event.get_action_display }} — {{ event.created_at }}{% if event.reason %}: {{ event.reason }}{% endif %}</small><br>
+                {% endfor %}
+            </td>
+        </tr>
+        {% empty %}<tr><td colspan="5">No accounting periods exist for this financial year.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</section>
+{% empty %}
+<section class="card"><p>No financial years have been configured.</p></section>
+{% endfor %}
+{% endblock %}

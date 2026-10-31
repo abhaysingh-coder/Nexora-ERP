@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Opening valuation | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div><p class="eyebrow">Inventory control</p><h1>Record opening valuation</h1></div>
+    <a class="button-link" href="{% url 'inventory_valuation' %}">Back to valuation</a>
+</section>
+<div class="panel">
+    <p>Use this controlled action for a legacy warehouse balance whose cost is not supported by complete movement history. Enter the approved current total value for the exact ledger quantity. The action preserves old stock movements and journals, records an audit event, and does not create an accounting journal. Review reconciliation and post a separately approved accounting correction if required.</p>
+</div>
+<form method="post" class="panel form-panel">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">
+        {% for field in form %}<label>{{ field.label }}{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}
+    </div>
+    <button class="primary" type="submit">Record valuation</button>
+</form>
+{% endblock %}

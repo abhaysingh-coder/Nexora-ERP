@@ -1,0 +1,79 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Nexora ERP{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <div class="shell">
+        <aside class="sidebar" aria-label="Main navigation">
+            <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">N</span><span>Nexora<span class="brand-light">ERP</span></span></a>
+            <nav class="main-nav">
+                <span class="nav-heading">Workspace</span>
+                <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}" {% if active_page == 'dashboard' %}aria-current="page"{% endif %}><span class="nav-icon">⌂</span>Dashboard</a>
+                <span class="nav-heading">Business</span>
+                <a class="nav-link {% if active_page == 'sales' %}active{% endif %}" href="{% url 'sales_invoice_list' %}"><span class="nav-icon">↗</span>Sales</a>
+                <a class="nav-link {% if active_page == 'sales' %}active{% endif %}" href="{% url 'sales_order_list' %}"><span class="nav-icon">▤</span>Sales orders</a>
+                <a class="nav-link {% if active_page == 'purchases' %}active{% endif %}" href="{% url 'purchase_invoice_list' %}"><span class="nav-icon">↙</span>Purchases</a>
+                <a class="nav-link {% if active_page == 'purchases' %}active{% endif %}" href="{% url 'purchase_order_list' %}"><span class="nav-icon">▤</span>Purchase orders</a>
+                <a class="nav-link {% if active_page == 'returns' %}active{% endif %}" href="{% url 'customer_return_list' %}"><span class="nav-icon">↩</span>Returns</a>
+                <a class="nav-link {% if active_page == 'inventory' %}active{% endif %}" href="{% url 'inventory_home' %}"><span class="nav-icon">▦</span>Inventory</a>
+                <a class="nav-link {% if active_page == 'inventory' %}active{% endif %}" href="{% url 'inventory_valuation' %}"><span class="nav-icon">◫</span>Stock valuation</a>
+                <span class="nav-heading">Finance</span>
+                <a class="nav-link {% if active_page == 'banking' %}active{% endif %}" href="{% url 'banking_home' %}"><span class="nav-icon">▣</span>Banking</a>
+                <a class="nav-link" href="{% url 'receivables_register' %}"><span class="nav-icon">←</span>Receivables</a>
+                <a class="nav-link" href="{% url 'payables_register' %}"><span class="nav-icon">→</span>Payables</a>
+                <a class="nav-link {% if active_page == 'taxation' %}active{% endif %}" href="{% url 'taxation_home' %}"><span class="nav-icon">%</span>Taxation</a>
+                <a class="nav-link {% if active_page == 'accounting' %}active{% endif %}" href="{% url 'trial_balance' %}"><span class="nav-icon">≡</span>Accounting</a>
+                <a class="nav-link" href="{% url 'profit_and_loss' %}"><span class="nav-icon">▥</span>Reports</a>
+                <details class="nav-more">
+                    <summary>More finance tools</summary>
+                    <a class="nav-link" href="{% url 'accounting_periods' %}">Financial periods</a>
+                    <a class="nav-link" href="{% url 'budget_report' %}">Budgets</a>
+                    <a class="nav-link" href="{% url 'fixed_assets' %}">Fixed assets</a>
+                </details>
+            </nav>
+            <div class="user-card">
+                <span class="user-avatar">{{ user.username|first|upper }}</span>
+                <div class="user-meta"><strong>{{ user.get_full_name|default:user.username }}</strong><small>Signed in</small></div>
+                <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="logout-button">Log out</button></form>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="topbar">
+                <div><span class="topbar-kicker">NEXORA WORKSPACE</span><strong>{{ organization|default:'Organization workspace' }}</strong></div>
+                <a class="button secondary" href="{% url 'organizations:select' %}">Switch organization</a>
+                <div class="top-actions"><span class="secure-indicator"><span></span>Secure session</span></div>
+            </header>
+            {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                        <div class="message {{ message.tags }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+    {% else %}
+    <main class="auth-shell">
+        <section class="auth-brand-panel">
+            <a class="brand" href="{% url 'home' %}"><span class="brand-mark">N</span><span>Nexora<span class="brand-light">ERP</span></span></a>
+            <div class="auth-brand-copy"><span class="auth-kicker">BUSINESS, IN BALANCE</span><h1>One clear view of your business.</h1><p>Sales, inventory and finance workflows together in one workspace.</p></div>
+            <small class="auth-footer">Nexora ERP · Business workspace</small>
+        </section>
+        <section class="auth-content">
+            {% if messages %}<div class="messages">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% endif %}
+    {% block content %}{% endblock %}
+    {% if user.is_authenticated %}
+        </main>
+    </div>
+    {% else %}
+            <p class="auth-support">Access is managed by your organization administrator.</p>
+        </section>
+    </main>
+    {% endif %}
+</body>
+</html>

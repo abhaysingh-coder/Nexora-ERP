@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}Dispatch {{ order.order_number }} | Nexora ERP{% endblock %}
+{% block content %}
+<section class="page-header"><div><p class="eyebrow">Sales dispatch</p><h1>Delivery for {{ order.order_number }}</h1></div><a class="button-link" href="{% url 'sales_order_detail' order.pk %}">Back to order</a></section>
+<form method="post" class="panel form-panel">{% csrf_token %}{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}<div class="form-grid"><label>{{ form.delivery_number.label }}{{ form.delivery_number }}{{ form.delivery_number.errors }}</label><label>{{ form.delivery_date.label }}{{ form.delivery_date }}{{ form.delivery_date.errors }}</label><label>{{ form.warehouse.label }}{{ form.warehouse }}{{ form.warehouse.errors }}</label></div><h2>Dispatch quantities</h2><p>Enter the quantities being dispatched now. The application checks outstanding order quantities and source warehouse stock at posting.</p><div class="form-grid">{% for field in form %}{% if field.name|slice:":9" == "quantity_" %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}</div><button class="primary" type="submit">Dispatch goods</button></form>
+{% endblock %}

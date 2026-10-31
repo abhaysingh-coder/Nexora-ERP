@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Import bank statement | Nexora ERP{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Banking</p>
+        <h1>Import bank statement</h1>
+    </div>
+</section>
+
+<div class="login-card">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <p>
+            <label for="account">Bank account</label>
+            <select id="account" name="account" class="form-control">
+                {% for account in accounts %}
+                <option value="{{ account.pk }}">{{ account.name }}</option>
+                {% endfor %}
+            </select>
+        </p>
+        <p>
+            <label for="csv_file">CSV file</label>
+            <input id="csv_file" name="csv_file" type="file" class="form-control">
+        </p>
+        <button class="primary" type="submit">Import</button>
+    </form>
+</div>
+{% endblock %}
