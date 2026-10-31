@@ -126,3 +126,6 @@ See [docs/GST_RULES.md](docs/GST_RULES.md) and [docs/DATABASE_DESIGN.md](docs/DA
 ```
 
 See [docs/BANKING.md](docs/BANKING.md) and [docs/FINANCIAL_CONTROLS.md](docs/FINANCIAL_CONTROLS.md) for workflow details and limitations.
+=======
+# Nexora-ERP
+Short, professional, memorable, and suitable for future expansion.
