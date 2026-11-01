@@ -121,10 +121,26 @@ This is a substantial ERP roadmap. Work should proceed by delivering complete, t
 ### Phase 4 export-isolation continuation (2026-10-31)
 
 - [x] Add CSV-content isolation tests for tax register and banking receivables/payables, including organization/branch parameter tampering, foreign party IDs and date filtering; focused taxation/banking tests passed (34 tests).
-- [x] Verify latest system/migration checks and full suites: Django 140 tests passed; pytest 70 tests and 366 subtests passed.
-- [ ] Complete direct content-level isolation evidence for all 12 CSV output modes (currently 6 modes have selected content-level regressions) and expand filter/date/query coverage.
+- [x] Add parsed CSV-content isolation tests for the remaining six accounting modes: general ledger, profit and loss, balance sheet, year-end opening, budget-vs-actual, and fixed assets. Focused selectors passed (6 tests); all accounting tests passed (34 tests).
+- [x] Fix the confirmed fixed-asset CSV annotation/property collision and route invalid calendar dates through explicit report validation without changing authorization policy.
+- [x] Verify latest system/migration checks and full suites: Django 146 tests passed; pytest 70 tests and 366 subtests passed.
+- [x] Add selected direct CSV-content evidence for all 12 output modes across 11 routes. This is not exhaustive role/filter/object coverage; branch-null behavior remains policy-dependent.
+- [ ] Resolve owner policy for branch-null/shared report data and approve report/export read and export capabilities. Matrix remains **DEFERRED / NOT APPROVED**; do not broaden access.
+- [ ] Expand remaining filter/date/query combinations and per-role coverage where owner-approved policy exists.
 - [ ] Test cross-tenant/branch inputs for dashboard KPIs beyond sales totals; classification and branch-null policy remain owner-dependent.
 - [ ] Continue route-specific authorization, supported POST, admin action/audit, and service-boundary verification. Existing smoke probes are not full authorization evidence.
 - [ ] Keep report/export role matrix **DEFERRED / NOT APPROVED**; do not broaden access pending an explicit policy.
 
 **Current stop status:** Owner deferred the report/export matrix approval. Phase 4 is **IN PROGRESS**; authorization is not complete. The test runner used an isolated database and no business database migration was run. Phase 5 has **not started**.
+
+### Phase 4 owner-policy and dashboard continuation (2026-11-01)
+
+- [x] Expanded the eight owner-policy entries with current behavior, affected roles/routes, alternatives and trade-offs, recommendations, approval fields, and regression tests required after approval. Current approval state and remaining blockers are recorded per decision; no policy was inferred from current behavior.
+- [x] Recorded owner selections received 2026-11-01. Policy models P4-POL-01/02/03/06/07/08 are approved, but role/category/scope assignments remain blocked. P4-POL-04/05 explicitly approve separating unallocated data.
+- [x] Implemented the approved P4-POL-04/05 presentation: branch-null ledger values/lines are separate from branch-specific totals across reports/dashboard, and branch-null budget actuals are separate and excluded from branch variance. No role grants were added.
+- [x] Added a direct dashboard regression for valid branch-null sales and purchase invoices. It asserts rendered branch and organization KPI, receivable/payable, and inventory values, and verifies recent-activity visibility. Current posting behavior routes null-branch stock movements through an organization warehouse, so such activity can affect branch valuation; this remains an unresolved policy/business-scope question.
+- [x] Focused dashboard and approved scope-separation tests passed (8 tests total) on isolated SQLite.
+- [ ] Run full Django and pytest suites after the approved scope-separation implementation; prior full results predate these changes. PostgreSQL behavior remains unverified.
+- [ ] Obtain role/category/scope assignments for report, export, auditor, shared-asset, organization-wide, and year-end capabilities.
+- [ ] Complete dashboard verification across all remaining source-data edge cases and resolve owner policy for unallocated inventory exceptions and other shared/null-branch information.
+- [ ] Continue route-specific authorization, admin action/audit, service-boundary, and approved branch-scope verification. Phase 4 remains **IN PROGRESS**; Phase 5 has **NOT STARTED**.

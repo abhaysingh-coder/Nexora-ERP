@@ -71,8 +71,14 @@ def _report_lines(request, organization, *, include_start=True):
         lines = lines.filter(Q(entry__branch_id=request.user.branch_id) | Q(entry__branch__isnull=True))
     raw_start = request.GET.get('start', '')
     raw_end = request.GET.get('end', '')
-    start = parse_date(raw_start)
-    end = parse_date(raw_end)
+    try:
+        start = parse_date(raw_start)
+    except ValueError:
+        start = None
+    try:
+        end = parse_date(raw_end)
+    except ValueError:
+        end = None
     if (raw_start and start is None) or (raw_end and end is None):
         return lines.none(), start, end, 'Enter dates in YYYY-MM-DD format.'
     year_id = request.GET.get('financial_year')
@@ -104,14 +110,71 @@ def _report_lines(request, organization, *, include_start=True):
     return lines, start, end, ''
 
 
-def _render_report(request, title, template, rows, organization, start, end, error='', note=''):
+def _branch_report_lines(lines, branch_id):
+    if not branch_id:
+        return lines, None
+    return (
+        lines.filter(entry__branch_id=branch_id),
+        lines.filter(entry__branch__isnull=True),
+    )
+
+
+def _account_summary_rows(aggregates, balance_mode):
+    rows = []
+    for item in aggregates:
+        debit = item['debit'] or Decimal('0')
+        credit = item['credit'] or Decimal('0')
+        if balance_mode == 'net':
+            balance = debit - credit
+        elif item['account__account_type'] in {'asset', 'expense'}:
+            balance = debit - credit
+        else:
+            balance = credit - debit
+        rows.append(
+            {
+                'code': item['account__code'],
+                'name': item['account__name'],
+                'account_type': item['account__account_type'],
+                'debit': debit,
+                'credit': credit,
+                'balance': balance,
+            }
+        )
+    return rows
+
+
+def _render_report(
+    request,
+    title,
+    template,
+    rows,
+    organization,
+    start,
+    end,
+    error='',
+    note='',
+    shared_rows=None,
+):
     if request.GET.get('format') == 'csv' and not error:
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{title.lower().replace(" ", "-")}.csv"'
         writer = csv.writer(response)
-        writer.writerow(['Code', 'Account', 'Debit', 'Credit', 'Balance'])
+        if shared_rows is None:
+            writer.writerow(['Code', 'Account', 'Debit', 'Credit', 'Balance'])
+        else:
+            writer.writerow(['Scope', 'Code', 'Account', 'Debit', 'Credit', 'Balance'])
         for row in rows:
-            writer.writerow([row['code'], row['name'], row['debit'], row['credit'], row['balance']])
+            values = [row['code'], row['name'], row['debit'], row['credit'], row['balance']]
+            writer.writerow(values if shared_rows is None else ['Assigned branch', *values])
+        for row in shared_rows or []:
+            writer.writerow([
+                'Shared / unallocated',
+                row['code'],
+                row['name'],
+                row['debit'],
+                row['credit'],
+                row['balance'],
+            ])
         return response
     return render(
         request,
@@ -120,6 +183,12 @@ def _render_report(request, title, template, rows, organization, start, end, err
             'title': title,
             'organization': organization,
             'rows': Paginator(rows, 50).get_page(request.GET.get('page')),
+            'shared_rows': (
+                Paginator(shared_rows, 50).get_page(request.GET.get('shared_page'))
+                if shared_rows is not None
+                else None
+            ),
+            'has_shared_scope': shared_rows is not None,
             'start': start,
             'end': end,
             'error': error,
@@ -155,6 +224,34 @@ def journal_entry_detail(request, pk):
     })
 
 
+def _general_ledger_rows(lines, opening_lines):
+    opening_balances = {
+        item['account_id']: (item['debit'] or Decimal('0')) - (item['credit'] or Decimal('0'))
+        for item in opening_lines.values('account_id').annotate(
+            debit=Sum('debit'),
+            credit=Sum('credit'),
+        )
+    }
+    running_balances = opening_balances
+    rows = []
+    for line in lines.order_by('entry__entry_date', 'entry_id', 'id'):
+        running_balances[line.account_id] = (
+            running_balances.get(line.account_id, Decimal('0')) + line.debit - line.credit
+        )
+        rows.append(
+            {
+                'date': line.entry.entry_date,
+                'reference': line.entry.reference,
+                'account': line.account,
+                'description': line.description,
+                'debit': line.debit,
+                'credit': line.credit,
+                'balance': running_balances[line.account_id],
+            }
+        )
+    return rows
+
+
 @login_required
 def trial_balance(request):
     organization = _authorized_organization(request)
@@ -164,25 +261,18 @@ def trial_balance(request):
     if end:
         lines = lines.filter(entry__entry_date__lte=end)
     start = None
-    aggregates = lines.values('account_id', 'account__code', 'account__name', 'account__account_type').annotate(
+    branch_lines, shared_lines = _branch_report_lines(lines, request.user.branch_id)
+    aggregates = branch_lines.values('account_id', 'account__code', 'account__name', 'account__account_type').annotate(
         debit=Sum('debit'),
         credit=Sum('credit'),
     ).order_by('account__code')
-    rows = []
-    for item in aggregates:
-        debit = item['debit'] or Decimal('0')
-        credit = item['credit'] or Decimal('0')
-        balance = debit - credit
-        rows.append(
-            {
-                'code': item['account__code'],
-                'name': item['account__name'],
-                'account_type': item['account__account_type'],
-                'debit': debit,
-                'credit': credit,
-                'balance': balance,
-            }
-        )
+    rows = _account_summary_rows(aggregates, 'net')
+    shared_rows = None
+    if shared_lines is not None:
+        shared_aggregates = shared_lines.values(
+            'account_id', 'account__code', 'account__name', 'account__account_type'
+        ).annotate(debit=Sum('debit'), credit=Sum('credit')).order_by('account__code')
+        shared_rows = _account_summary_rows(shared_aggregates, 'debit')
     return _render_report(
         request,
         'Trial balance',
@@ -197,6 +287,7 @@ def trial_balance(request):
             if getattr(request, 'accounting_financial_year', None)
             else 'As of the end date; all earlier posted entries are included.'
         ),
+        shared_rows=shared_rows,
     )
 
 
@@ -214,7 +305,7 @@ def general_ledger(request):
         if not accounts.filter(pk=account_id).exists():
             return HttpResponseForbidden('Account is outside your organization or branch access.')
         lines = lines.filter(account_id=account_id)
-    opening_balances = {}
+    opening_lines = JournalEntryLine.objects.none()
     if start and not error:
         opening_lines = JournalEntryLine.objects.filter(
             entry__organization=organization,
@@ -234,46 +325,42 @@ def general_ledger(request):
             )
         if account_id:
             opening_lines = opening_lines.filter(account_id=account_id)
-        opening_balances = {
-            item['account_id']: (item['debit'] or Decimal('0')) - (item['credit'] or Decimal('0'))
-            for item in opening_lines.values('account_id').annotate(
-                debit=Sum('debit'),
-                credit=Sum('credit'),
-            )
-        }
-    ledger_rows = []
-    running_balances = opening_balances
-    for line in lines.order_by('entry__entry_date', 'entry_id', 'id'):
-        running_balances[line.account_id] = (
-            running_balances.get(line.account_id, Decimal('0')) + line.debit - line.credit
+    if request.user.branch_id:
+        branch_lines, shared_lines = _branch_report_lines(lines, request.user.branch_id)
+        branch_opening_lines, shared_opening_lines = _branch_report_lines(
+            opening_lines,
+            request.user.branch_id,
         )
-        ledger_rows.append(
-            {
-                'date': line.entry.entry_date,
-                'reference': line.entry.reference,
-                'account': line.account,
-                'description': line.description,
-                'debit': line.debit,
-                'credit': line.credit,
-                'balance': running_balances[line.account_id],
-            }
-        )
+        ledger_rows = _general_ledger_rows(branch_lines, branch_opening_lines)
+        shared_ledger_rows = _general_ledger_rows(shared_lines, shared_opening_lines)
+    else:
+        ledger_rows = _general_ledger_rows(lines, opening_lines)
+        shared_ledger_rows = None
     if request.GET.get('format') == 'csv' and not error:
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="general-ledger.csv"'
         writer = csv.writer(response)
-        writer.writerow(['Date', 'Reference', 'Account', 'Description', 'Debit', 'Credit', 'Running balance'])
-        for row in ledger_rows:
+        if shared_ledger_rows is None:
+            writer.writerow(['Date', 'Reference', 'Account', 'Description', 'Debit', 'Credit', 'Running balance'])
+            scoped_rows = [(None, row) for row in ledger_rows]
+        else:
+            writer.writerow(['Scope', 'Date', 'Reference', 'Account', 'Description', 'Debit', 'Credit', 'Running balance'])
+            scoped_rows = (
+                [('Assigned branch', row) for row in ledger_rows]
+                + [('Shared / unallocated', row) for row in shared_ledger_rows]
+            )
+        for scope, row in scoped_rows:
+            values = [
+                row['date'],
+                row['reference'],
+                row['account'].name,
+                row['description'],
+                row['debit'],
+                row['credit'],
+                row['balance'],
+            ]
             writer.writerow(
-                [
-                    row['date'],
-                    row['reference'],
-                    row['account'].name,
-                    row['description'],
-                    row['debit'],
-                    row['credit'],
-                    row['balance'],
-                ]
+                values if scope is None else [scope, *values]
             )
         return response
     return render(
@@ -284,6 +371,12 @@ def general_ledger(request):
             'accounts': accounts,
             'selected_account': account_id,
             'rows': Paginator(ledger_rows, 50).get_page(request.GET.get('page')),
+            'shared_rows': (
+                Paginator(shared_ledger_rows, 50).get_page(request.GET.get('shared_page'))
+                if shared_ledger_rows is not None
+                else None
+            ),
+            'has_shared_scope': shared_ledger_rows is not None,
             'start': start,
             'end': end,
             'error': error,
@@ -300,19 +393,24 @@ def _income_statement_rows(lines, account_types):
     aggregates = lines.filter(account__account_type__in=account_types).values(
         'account__code', 'account__name', 'account__account_type'
     ).annotate(debit=Sum('debit'), credit=Sum('credit')).order_by('account__code')
-    rows = []
-    for item in aggregates:
-        debit = item['debit'] or Decimal('0')
-        credit = item['credit'] or Decimal('0')
-        balance = debit - credit if item['account__account_type'] in {'asset', 'expense'} else credit - debit
+    return _account_summary_rows(aggregates, 'normal')
+
+
+def _balance_sheet_rows(lines):
+    rows = _income_statement_rows(lines, {'asset', 'liability', 'equity'})
+    earnings = _income_statement_rows(lines, {'income', 'expense'})
+    current_earnings = sum(
+        (row['balance'] if row['account_type'] == 'income' else -row['balance'] for row in earnings),
+        Decimal('0'),
+    )
+    if current_earnings:
         rows.append(
             {
-                'code': item['account__code'],
-                'name': item['account__name'],
-                'account_type': item['account__account_type'],
-                'debit': debit,
-                'credit': credit,
-                'balance': balance,
+                'code': 'CURRENT-EARNINGS',
+                'name': 'Current earnings included in equity',
+                'debit': max(-current_earnings, Decimal('0')),
+                'credit': max(current_earnings, Decimal('0')),
+                'balance': current_earnings,
             }
         )
     return rows
@@ -324,8 +422,24 @@ def profit_and_loss(request):
     if organization is None:
         return HttpResponseForbidden('An authorized organization is required.')
     lines, start, end, error = _report_lines(request, organization)
-    rows = _income_statement_rows(lines, {'income', 'expense'})
-    return _render_report(request, 'Profit and loss', 'accounting/report.html', rows, organization, start, end, error)
+    branch_lines, shared_lines = _branch_report_lines(lines, request.user.branch_id)
+    rows = _income_statement_rows(branch_lines, {'income', 'expense'})
+    shared_rows = (
+        _income_statement_rows(shared_lines, {'income', 'expense'})
+        if shared_lines is not None
+        else None
+    )
+    return _render_report(
+        request,
+        'Profit and loss',
+        'accounting/report.html',
+        rows,
+        organization,
+        start,
+        end,
+        error,
+        shared_rows=shared_rows,
+    )
 
 
 @login_required
@@ -348,22 +462,13 @@ def balance_sheet(request):
             lines = lines.filter(Q(entry__branch_id=request.user.branch_id) | Q(entry__branch__isnull=True))
         if end:
             lines = lines.filter(entry__entry_date__lte=end)
-    rows = _income_statement_rows(lines, {'asset', 'liability', 'equity'})
-    earnings = _income_statement_rows(lines, {'income', 'expense'})
-    current_earnings = sum(
-        (row['balance'] if row['account_type'] == 'income' else -row['balance'] for row in earnings),
-        Decimal('0'),
+    branch_lines, shared_lines = _branch_report_lines(lines, request.user.branch_id)
+    rows = _balance_sheet_rows(branch_lines)
+    shared_rows = (
+        _balance_sheet_rows(shared_lines)
+        if shared_lines is not None
+        else None
     )
-    if current_earnings:
-        rows.append(
-            {
-                'code': 'CURRENT-EARNINGS',
-                'name': 'Current earnings included in equity',
-                'debit': max(-current_earnings, Decimal('0')),
-                'credit': max(current_earnings, Decimal('0')),
-                'balance': current_earnings,
-            }
-        )
     return _render_report(
         request,
         'Balance sheet',
@@ -374,6 +479,7 @@ def balance_sheet(request):
         end,
         error,
         note='Balances are cumulative through the end date. Current earnings are included in equity.',
+        shared_rows=shared_rows,
     )
 
 
@@ -590,23 +696,30 @@ def _budget_report_rows(budgets):
     for budget in budgets:
         branch_actuals = actuals.get((budget.account_id, budget.period_id), {})
         if budget.branch_id:
-            totals = [
-                branch_actuals.get(budget.branch_id, (Decimal('0'), Decimal('0'))),
-                branch_actuals.get(None, (Decimal('0'), Decimal('0'))),
-            ]
+            own_debit, own_credit = branch_actuals.get(
+                budget.branch_id,
+                (Decimal('0'), Decimal('0')),
+            )
+            shared_debit, shared_credit = branch_actuals.get(
+                None,
+                (Decimal('0'), Decimal('0')),
+            )
         else:
             totals = list(branch_actuals.values())
-        debit = sum((values[0] for values in totals), Decimal('0'))
-        credit = sum((values[1] for values in totals), Decimal('0'))
-        actual = (
-            credit - debit
-            if budget.account.account_type in {'income', 'liability', 'equity'}
-            else debit - credit
+            own_debit = sum((values[0] for values in totals), Decimal('0'))
+            own_credit = sum((values[1] for values in totals), Decimal('0'))
+            shared_debit = Decimal('0')
+            shared_credit = Decimal('0')
+        is_credit_nature = budget.account.account_type in {'income', 'liability', 'equity'}
+        actual = own_credit - own_debit if is_credit_nature else own_debit - own_credit
+        unallocated_actual = (
+            shared_credit - shared_debit if is_credit_nature else shared_debit - shared_credit
         )
         variance = actual - budget.amount
         rows.append({
             'budget': budget,
             'actual': actual,
+            'unallocated_actual': unallocated_actual,
             'variance': variance,
             'variance_percent': (variance * Decimal('100') / budget.amount) if budget.amount else None,
         })
@@ -655,7 +768,18 @@ def budget_report(request):
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="budget-vs-actual.csv"'
         writer = csv.writer(response)
-        writer.writerow(['Period', 'Account', 'Branch', 'Department', 'Cost centre', 'Budget', 'Actual', 'Variance', 'Variance %'])
+        writer.writerow([
+            'Period',
+            'Account',
+            'Branch',
+            'Department',
+            'Cost centre',
+            'Budget',
+            'Actual',
+            'Shared / unallocated actual',
+            'Variance',
+            'Variance %',
+        ])
         for row in _budget_report_rows(budgets.order_by('-period__starts_on', 'account__code')):
             budget = row['budget']
             writer.writerow([
@@ -666,6 +790,7 @@ def budget_report(request):
                 budget.cost_center,
                 budget.amount,
                 row['actual'],
+                row['unallocated_actual'],
                 row['variance'],
                 row['variance_percent'] if row['variance_percent'] is not None else '',
             ])
@@ -785,7 +910,7 @@ def fixed_assets(request):
             output_field=DecimalField(max_digits=18, decimal_places=2),
         )
     ).annotate(
-        net_book_value=Greatest(
+        calculated_net_book_value=Greatest(
             F('acquisition_cost') - F('accumulated_amount'),
             F('salvage_value'),
         )
@@ -808,7 +933,7 @@ def fixed_assets(request):
                 asset.acquisition_date,
                 asset.acquisition_cost,
                 asset.accumulated_amount,
-                asset.net_book_value,
+                asset.calculated_net_book_value,
                 asset.disposed_at or '',
             ])
         return response

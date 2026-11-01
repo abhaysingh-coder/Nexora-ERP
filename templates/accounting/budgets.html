@@ -17,9 +17,9 @@
 </section>
 {% endif %}
 <section class="card">
-    <p>Actuals are calculated from posted journal lines in each accounting period. Variance is actual minus budget.</p>
+    <p>Actuals are calculated from posted journal lines in each accounting period. Branch-null actuals are shown separately as shared/unallocated and are not included in branch budget variance.</p>
     <div class="table-wrap"><table>
-        <thead><tr><th>Period</th><th>Account</th><th>Branch</th><th>Department / cost centre</th><th>Budget</th><th>Actual</th><th>Variance</th><th>Variance %</th></tr></thead>
+        <thead><tr><th>Period</th><th>Account</th><th>Branch</th><th>Department / cost centre</th><th>Budget</th><th>Branch actual</th><th>Shared / unallocated actual</th><th>Variance</th><th>Variance %</th></tr></thead>
         <tbody>
         {% for row in report_rows %}
         <tr>
@@ -27,10 +27,10 @@
             <td>{{ row.budget.account.code }} — {{ row.budget.account.name }}</td>
             <td>{{ row.budget.branch.name|default:'All branches' }}</td>
             <td>{{ row.budget.department }}{% if row.budget.department and row.budget.cost_center %} / {% endif %}{{ row.budget.cost_center }}</td>
-            <td>{{ row.budget.amount }}</td><td>{{ row.actual }}</td><td>{{ row.variance }}</td>
+            <td>{{ row.budget.amount }}</td><td>{{ row.actual }}</td><td>{{ row.unallocated_actual }}</td><td>{{ row.variance }}</td>
             <td>{% if row.variance_percent != None %}{{ row.variance_percent|floatformat:2 }}%{% else %}—{% endif %}</td>
         </tr>
-        {% empty %}<tr><td colspan="8">No budget lines have been created.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="9">No budget lines have been created.</td></tr>{% endfor %}
         </tbody>
     </table></div>
     {% if rows.has_other_pages %}

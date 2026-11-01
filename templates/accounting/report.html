@@ -24,6 +24,7 @@
         <button class="button" type="submit">Filter</button>
     </form>
     {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+    {% if has_shared_scope %}<h2>Assigned-branch balances</h2>{% endif %}
     <div class="table-wrap"><table>
         <thead><tr><th>Account code</th><th>Account</th><th>Debit</th><th>Credit</th><th>{{ balance_label }}</th></tr></thead>
         <tbody>
@@ -31,6 +32,23 @@
         {% empty %}<tr><td colspan="5">No posted journal lines found for this period.</td></tr>{% endfor %}
         </tbody>
     </table></div>
+    {% if has_shared_scope %}
+    <h2>Shared / unallocated balances</h2>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Account code</th><th>Account</th><th>Debit</th><th>Credit</th><th>{{ balance_label }}</th></tr></thead>
+        <tbody>
+        {% for row in shared_rows %}<tr><td>{{ row.code }}</td><td>{{ row.name }}</td><td>{{ row.debit }}</td><td>{{ row.credit }}</td><td>{{ row.balance }}</td></tr>
+        {% empty %}<tr><td colspan="5">No shared or unallocated journal lines found for this period.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if shared_rows.has_other_pages %}
+    <div class="pagination">
+        {% if shared_rows.has_previous %}<a class="button-link" href="?shared_page={{ shared_rows.previous_page_number }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous shared page</a>{% endif %}
+        <span>Shared page {{ shared_rows.number }} of {{ shared_rows.paginator.num_pages }}</span>
+        {% if shared_rows.has_next %}<a class="button-link" href="?shared_page={{ shared_rows.next_page_number }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next shared page</a>{% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
     {% if rows.has_other_pages %}
     <div class="pagination">
         {% if rows.has_previous %}<a class="button-link" href="?page={{ rows.previous_page_number }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous</a>{% endif %}

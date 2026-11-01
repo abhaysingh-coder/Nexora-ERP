@@ -9,7 +9,7 @@
 - Purchase and sales vertical slice: Implemented, verification incomplete
 - Banking module: Implemented and verified
 - Dashboard shell: Implemented
-- Automated verification (2026-10-31): `manage.py check` and migration drift check passed; full Django suite passed 140 tests; pytest passed 70 tests and 366 subtests. See the Phase 4 report; do not infer authorization completion or production readiness.
+- Latest automated verification: `manage.py check` and migration drift check passed; full Django suite passed 149 tests; pytest passed 73 tests and 366 subtests. See the Phase 4 report; do not infer authorization completion or production readiness.
 
 ## Phase 4 status (2026-10-24)
 
@@ -34,10 +34,19 @@
 ## Phase 4 export-isolation continuation (2026-10-31)
 
 - Added direct CSV-content regressions for the tax register and banking receivables/payables. Tests cover records from two organizations and multiple branches, tampered organization/branch parameters, related party IDs, date ranges, invalid dates, and exclusion of unauthorized rows. The focused taxation/banking run passed 34 tests.
-- Latest complete validation: `python manage.py check` passed; `python manage.py makemigrations --check --dry-run` reported no changes; `python manage.py test` passed 140 tests; `python -m pytest -q` passed 70 tests and 366 subtests.
-- Six of 12 CSV output modes now have selected content-level tenant/branch regression evidence. Six accounting output modes still lack equivalent direct content assertions, and all report modes require broader role/filter testing. Dashboard isolation remains directly asserted only for the sales KPI.
-- No application permission or export grant was changed. Branch-null/shared-record visibility remains policy-dependent, and report/export role matrix remains **DEFERRED / NOT APPROVED** in `ROLE_SCREEN_MATRIX.md`.
+- Added content-level regression tests for the remaining six accounting CSV modes: general ledger, profit and loss, balance sheet, year-end opening, budget-vs-actual, and fixed assets. The tests parse the downloaded CSV, use two organizations and multiple branches, and exercise applicable foreign IDs and query tampering.
+- The fixed-asset CSV annotation/property collision and uncaught invalid-calendar-date `ValueError` were reproduced and narrowly fixed. No access grant was added.
+- Latest complete validation: `python manage.py check` passed; `python manage.py makemigrations --check --dry-run` reported no changes; `python manage.py test` passed 146 tests; `python -m pytest -q` passed 70 tests and 366 subtests. `python manage.py test accounting.tests` passed 34 tests.
+- All 12 CSV output modes now have selected direct content-level tenant/branch regression evidence. This does not cover every role, filter permutation, date, object or branch-null policy. At that milestone, dashboard isolation was directly asserted only for the sales KPI; see the subsequent dashboard continuation below.
+- Branch-null ledger, asset and budget actual visibility remains policy-dependent; year-end export is organization-level and branch-assigned users are denied. Report/export role matrix remains **DEFERRED / NOT APPROVED** in `ROLE_SCREEN_MATRIX.md`.
 - Phase 4 remains **IN PROGRESS** and Phase 5 has **NOT STARTED**. Tests use an isolated SQLite database; PostgreSQL concurrency and business-database migration behavior were not tested.
+
+## Phase 4 owner policy and dashboard continuation
+
+- Recorded owner selections on 2026-11-01 for all eight policy models in `docs/PHASE_4_OWNER_POLICY_DECISIONS.md`. Implemented the approved P4-POL-04/05 separation: branch-null ledger entries/aggregates and budget actuals are displayed separately from branch-attributed totals/variance. No role grants were added. Role-to-capability assignments for report, export, auditor, shared-asset, organization-wide, and year-end capabilities remain blocked; `ROLE_SCREEN_MATRIX.md` remains unchanged and **DEFERRED / NOT APPROVED**.
+- Added focused dashboard isolation tests covering branch-assigned and organization-level owners, active membership resolution, session/query tampering, posted branch-null/branch-specific sales and purchases, inventory value and exceptions, low-stock counts, cash/bank balances, receivables/payables, and recent journal activity. Tests assert rendered values and references for two organizations, two branches, and branch-null/shared records.
+- Dashboard source inspection found no displayed tax summary, charts, customer/supplier counts, or separate sales/purchase activity list. Branch-null treatment varies by metric: branch sales/purchase KPI totals exclude branch-null invoices; their posted journals now appear separately under approved P4-POL-04; posting routes stock movements through an organization warehouse, affecting that warehouse's branch valuation. The branch dashboard excludes null-branch cash accounts and shows branch-null journal activity separately. The inventory helper also exposes organization-wide legacy unallocated-stock exception counts to branch views, for which no policy was approved.
+- Focused dashboard and accounting scope-separation tests pass (3 dashboard tests and 5 accounting tests across trial balance, general ledger, profit and loss, balance sheet, and budget CSV/UI). Full validation for the approved code changes is pending. The previous full-suite results predate the code changes. Phase 4 remains **IN PROGRESS**; Phase 5 has **NOT STARTED**.
 
 ## Completed work
 

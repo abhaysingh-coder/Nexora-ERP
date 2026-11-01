@@ -1,3 +1,5 @@
+import csv
+from io import StringIO
 from datetime import date
 from decimal import Decimal
 
@@ -346,6 +348,37 @@ class AccountingTests(TestCase):
         JournalEntryLine.objects.create(entry=entry, account=self.sales, credit=Decimal('100'))
         return entry
 
+    def _post_report_entry(
+        self,
+        organization,
+        branch,
+        reference,
+        entry_date,
+        debit_account,
+        credit_account,
+        amount,
+    ):
+        entry = JournalEntry.objects.create(
+            organization=organization,
+            branch=branch,
+            reference=reference,
+            entry_date=entry_date,
+        )
+        JournalEntryLine.objects.create(
+            entry=entry,
+            account=debit_account,
+            description=f'{reference} debit',
+            debit=amount,
+        )
+        JournalEntryLine.objects.create(
+            entry=entry,
+            account=credit_account,
+            description=f'{reference} credit',
+            credit=amount,
+        )
+        entry.post()
+        return entry
+
     def _organization_finance_user(self, username):
         user = User.objects.create_user(
             username=username,
@@ -528,12 +561,737 @@ class AccountingTests(TestCase):
         )
         branch_entry.post()
 
+        shared_debit = Account.objects.create(
+            organization=self.organization,
+            code='9002',
+            name='Shared-only trial balance account',
+            account_type='asset',
+        )
+        shared_credit = Account.objects.create(
+            organization=self.organization,
+            code='9003',
+            name='Shared-only trial balance offset',
+            account_type='equity',
+        )
+        self._post_report_entry(
+            self.organization,
+            None,
+            'SHARED-TRIAL-BALANCE-ENTRY',
+            date(2026, 5, 1),
+            shared_debit,
+            shared_credit,
+            Decimal('33.00'),
+        )
+
         self.assertNotContains(response, 'Private account')
         csv_response = self.client.get(reverse('trial_balance'), {'format': 'csv'})
         self.assertEqual(csv_response.status_code, 200)
+        csv_rows = list(csv.DictReader(StringIO(csv_response.content.decode())))
         csv_contents = csv_response.content.decode()
         self.assertNotIn('Foreign-only account', csv_contents)
         self.assertNotIn('Other-branch-only account', csv_contents)
+        shared_row = next(row for row in csv_rows if row['Account'] == 'Shared-only trial balance account')
+        self.assertEqual(shared_row['Scope'], 'Shared / unallocated')
+
+    def test_general_ledger_csv_isolated_by_tenant_branch_dates_and_account(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other ledger export branch',
+            code='GL-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign general ledger',
+            slug='foreign-general-ledger',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign ledger branch',
+            code='GL-FOREIGN',
+        )
+        scenarios = (
+            (self.organization, self.branch, 'GL-OWN-ROW', 'Own-branch GL account'),
+            (self.organization, other_branch, 'GL-OTHER-ROW', 'Other-branch GL account'),
+            (self.organization, None, 'GL-SHARED-ROW', 'Shared GL account'),
+            (foreign_org, foreign_branch, 'GL-FOREIGN-ROW', 'Foreign GL account'),
+        )
+        foreign_account = None
+        own_account = None
+        for index, (organization, branch, reference, account_name) in enumerate(scenarios):
+            debit_account = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'GL{index}D',
+                name=account_name,
+                account_type='asset',
+            )
+            credit_account = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'GL{index}C',
+                name=f'{account_name} offset',
+                account_type='equity',
+            )
+            self._post_report_entry(
+                organization,
+                branch,
+                reference,
+                date(2026, 3, 10),
+                debit_account,
+                credit_account,
+                Decimal('10.00') + Decimal(index),
+            )
+            if reference == 'GL-OWN-ROW':
+                own_account = debit_account
+            elif reference == 'GL-FOREIGN-ROW':
+                foreign_account = debit_account
+
+        foreign_year = FinancialYear.objects.create(
+            organization=foreign_org,
+            name='Foreign GL year',
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('general_ledger'),
+            {
+                'format': 'csv',
+                'start': '2026-03-01',
+                'end': '2026-03-31',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+                'ordering': '-reference',
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+
+        self.assertEqual(response.status_code, 200)
+        references = {row['Reference'] for row in rows}
+        self.assertIn('GL-OWN-ROW', references)
+        self.assertIn('GL-SHARED-ROW', references)
+        self.assertNotIn('GL-OTHER-ROW', references)
+        self.assertNotIn('GL-FOREIGN-ROW', references)
+        scope_by_reference = {row['Reference']: row['Scope'] for row in rows}
+        self.assertEqual(scope_by_reference['GL-OWN-ROW'], 'Assigned branch')
+        self.assertEqual(scope_by_reference['GL-SHARED-ROW'], 'Shared / unallocated')
+
+        html_response = self.client.get(reverse('general_ledger'))
+        self.assertContains(html_response, 'Shared / unallocated entries')
+        self.assertContains(html_response, 'GL-SHARED-ROW')
+
+        selected_account = self.client.get(
+            reverse('general_ledger'),
+            {'format': 'csv', 'account': own_account.pk},
+        )
+        selected_rows = list(csv.DictReader(StringIO(selected_account.content.decode())))
+        self.assertTrue(selected_rows)
+        self.assertEqual(
+            {row['Account'] for row in selected_rows},
+            {'Own-branch GL account'},
+        )
+
+        for account_id in (foreign_account.pk, 99999999):
+            with self.subTest(account_id=account_id):
+                denied = self.client.get(
+                    reverse('general_ledger'),
+                    {'format': 'csv', 'account': account_id},
+                )
+                self.assertEqual(denied.status_code, 403)
+                self.assertNotIn('Foreign GL account', denied.content.decode())
+
+        invalid_year = self.client.get(
+            reverse('general_ledger'),
+            {'format': 'csv', 'financial_year': foreign_year.pk},
+        )
+        self.assertEqual(invalid_year.status_code, 200)
+        self.assertNotEqual(invalid_year['Content-Type'], 'text/csv')
+        self.assertNotIn('GL-FOREIGN-ROW', invalid_year.content.decode())
+
+        invalid_date = self.client.get(
+            reverse('general_ledger'),
+            {'format': 'csv', 'start': 'not-a-date'},
+        )
+        self.assertEqual(invalid_date.status_code, 200)
+        self.assertNotEqual(invalid_date['Content-Type'], 'text/csv')
+        self.assertNotIn('GL-FOREIGN-ROW', invalid_date.content.decode())
+
+    def test_profit_and_loss_csv_isolated_by_tenant_branch_and_date_filters(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other P&L branch',
+            code='PL-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign profit and loss',
+            slug='foreign-profit-and-loss',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign P&L branch',
+            code='PL-FOREIGN',
+        )
+        scenarios = (
+            (self.organization, self.branch, 'Own P&L expense', 'PL-OWN-ENTRY', Decimal('11.00')),
+            (self.organization, other_branch, 'Other P&L expense', 'PL-OTHER-ENTRY', Decimal('22.00')),
+            (self.organization, None, 'Shared P&L expense', 'PL-SHARED-ENTRY', Decimal('3.00')),
+            (foreign_org, foreign_branch, 'Foreign P&L expense', 'PL-FOREIGN-ENTRY', Decimal('44.00')),
+        )
+        for index, (organization, branch, expense_name, reference, amount) in enumerate(scenarios):
+            expense = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'PL{index}E',
+                name=expense_name,
+                account_type='expense',
+            )
+            cash = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'PL{index}C',
+                name=f'{expense_name} offset',
+                account_type='asset',
+            )
+            self._post_report_entry(
+                organization,
+                branch,
+                reference,
+                date(2026, 3, 10),
+                expense,
+                cash,
+                amount,
+            )
+        foreign_year = FinancialYear.objects.create(
+            organization=foreign_org,
+            name='Foreign P&L year',
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('profit_and_loss'),
+            {
+                'format': 'csv',
+                'start': '2026-03-01',
+                'end': '2026-03-31',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+                'account': 'not-an-account-filter',
+                'ordering': '-account',
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+        by_name = {row['Account']: row for row in rows}
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Decimal(by_name['Own P&L expense']['Debit']), Decimal('11.00'))
+        self.assertEqual(Decimal(by_name['Shared P&L expense']['Debit']), Decimal('3.00'))
+        self.assertEqual(by_name['Own P&L expense']['Scope'], 'Assigned branch')
+        self.assertEqual(by_name['Shared P&L expense']['Scope'], 'Shared / unallocated')
+        self.assertNotIn('Other P&L expense', by_name)
+        self.assertNotIn('Foreign P&L expense', by_name)
+
+        date_filtered = self.client.get(
+            reverse('profit_and_loss'),
+            {
+                'format': 'csv',
+                'start': '2026-03-11',
+                'end': '2026-03-31',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+            },
+        )
+        self.assertEqual(list(csv.DictReader(StringIO(date_filtered.content.decode()))), [])
+        malformed = self.client.get(
+            reverse('profit_and_loss'),
+            {'format': 'csv', 'start': '2026-99-99'},
+        )
+        self.assertEqual(malformed.status_code, 200)
+        self.assertNotEqual(malformed['Content-Type'], 'text/csv')
+        self.assertContains(malformed, 'Enter dates in YYYY-MM-DD format.')
+        self.assertNotIn('Foreign P&L expense', malformed.content.decode())
+
+        invalid_year = self.client.get(
+            reverse('profit_and_loss'),
+            {'format': 'csv', 'financial_year': foreign_year.pk},
+        )
+        self.assertNotEqual(invalid_year['Content-Type'], 'text/csv')
+        self.assertNotIn('Foreign P&L expense', invalid_year.content.decode())
+
+    def test_balance_sheet_csv_isolated_by_tenant_branch_and_cumulative_date_scope(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other balance sheet branch',
+            code='BS-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign balance sheet',
+            slug='foreign-balance-sheet',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign balance sheet branch',
+            code='BS-FOREIGN',
+        )
+        scenarios = (
+            (self.organization, self.branch, 'Own balance sheet asset', 'BS-OWN-ENTRY', Decimal('11.00')),
+            (self.organization, other_branch, 'Other balance sheet asset', 'BS-OTHER-ENTRY', Decimal('22.00')),
+            (self.organization, None, 'Shared balance sheet asset', 'BS-SHARED-ENTRY', Decimal('3.00')),
+            (foreign_org, foreign_branch, 'Foreign balance sheet asset', 'BS-FOREIGN-ENTRY', Decimal('44.00')),
+        )
+        for index, (organization, branch, asset_name, reference, amount) in enumerate(scenarios):
+            asset = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'BS{index}A',
+                name=asset_name,
+                account_type='asset',
+            )
+            equity = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'BS{index}E',
+                name=f'{asset_name} offset',
+                account_type='equity',
+            )
+            self._post_report_entry(
+                organization,
+                branch,
+                reference,
+                date(2026, 3, 10),
+                asset,
+                equity,
+                amount,
+            )
+        foreign_year = FinancialYear.objects.create(
+            organization=foreign_org,
+            name='Foreign balance sheet year',
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('balance_sheet'),
+            {
+                'format': 'csv',
+                'start': '2026-03-11',
+                'end': '2026-03-31',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+                'account': 'ignored-account-filter',
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+        by_name = {row['Account']: row for row in rows}
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Decimal(by_name['Own balance sheet asset']['Debit']), Decimal('11.00'))
+        self.assertEqual(Decimal(by_name['Shared balance sheet asset']['Debit']), Decimal('3.00'))
+        self.assertEqual(by_name['Own balance sheet asset']['Scope'], 'Assigned branch')
+        self.assertEqual(by_name['Shared balance sheet asset']['Scope'], 'Shared / unallocated')
+        self.assertNotIn('Other balance sheet asset', by_name)
+        self.assertNotIn('Foreign balance sheet asset', by_name)
+
+        malformed = self.client.get(
+            reverse('balance_sheet'),
+            {'format': 'csv', 'end': 'not-a-date'},
+        )
+        self.assertEqual(malformed.status_code, 200)
+        self.assertNotEqual(malformed['Content-Type'], 'text/csv')
+        self.assertNotIn('Foreign balance sheet asset', malformed.content.decode())
+        invalid_year = self.client.get(
+            reverse('balance_sheet'),
+            {'format': 'csv', 'financial_year': foreign_year.pk},
+        )
+        self.assertNotEqual(invalid_year['Content-Type'], 'text/csv')
+        self.assertNotIn('Foreign balance sheet asset', invalid_year.content.decode())
+
+    def test_year_end_opening_csv_is_organization_scoped_and_denies_branch_users(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other year-end branch',
+            code='YE-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign year-end organization',
+            slug='foreign-year-end-organization',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign year-end branch',
+            code='YE-FOREIGN',
+        )
+
+        def create_year(organization, suffix):
+            year = FinancialYear.objects.create(
+                organization=organization,
+                name=f'FY {suffix}',
+                starts_on=date(2026, 1, 1),
+                ends_on=date(2026, 1, 31),
+            )
+            AccountingPeriod.objects.create(
+                financial_year=year,
+                name=f'January {suffix}',
+                starts_on=year.starts_on,
+                ends_on=year.ends_on,
+            )
+            return year
+
+        def post_year_activity(organization, branch, suffix, amount):
+            asset = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'YE-{suffix}-A',
+                name=f'{suffix} opening asset',
+                account_type='asset',
+            )
+            liability = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'YE-{suffix}-L',
+                name=f'{suffix} opening liability',
+                account_type='liability',
+            )
+            self._post_report_entry(
+                organization,
+                branch,
+                f'YE-{suffix}-ACTIVITY',
+                date(2026, 1, 15),
+                asset,
+                liability,
+                amount,
+            )
+
+        own_year = create_year(self.organization, 'OWN')
+        post_year_activity(self.organization, self.branch, 'OWN', Decimal('100.00'))
+        post_year_activity(self.organization, other_branch, 'OTHER', Decimal('200.00'))
+        post_year_activity(self.organization, None, 'SHARED', Decimal('7.00'))
+        foreign_year = create_year(foreign_org, 'FOREIGN')
+        post_year_activity(foreign_org, foreign_branch, 'FOREIGN', Decimal('400.00'))
+
+        self.client.force_login(self.user)
+        branch_user_response = self.client.get(
+            reverse('year_end_closing', args=[own_year.pk]),
+            {'format': 'csv'},
+        )
+        self.assertEqual(branch_user_response.status_code, 403)
+        self.assertNotIn('OWN opening asset', branch_user_response.content.decode())
+
+        manager = self._organization_finance_user('year-end-export-manager')
+        self.client.force_login(manager)
+        response = self.client.get(
+            reverse('year_end_closing', args=[own_year.pk]),
+            {
+                'format': 'csv',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+        assets = {row['Account']: row for row in rows}
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Decimal(assets['OWN opening asset']['Opening debit']), Decimal('100.00'))
+        self.assertEqual(Decimal(assets['OTHER opening asset']['Opening debit']), Decimal('200.00'))
+        self.assertEqual(Decimal(assets['SHARED opening asset']['Opening debit']), Decimal('7.00'))
+        self.assertNotIn('FOREIGN opening asset', assets)
+        self.assertEqual(
+            {row['Branch'] for row in rows},
+            {'Main', 'Other year-end branch', 'Organization-wide'},
+        )
+
+        foreign_year_response = self.client.get(
+            reverse('year_end_closing', args=[foreign_year.pk]),
+            {'format': 'csv'},
+        )
+        self.assertEqual(foreign_year_response.status_code, 404)
+        self.assertNotIn('FOREIGN opening asset', foreign_year_response.content.decode())
+
+    def test_budget_csv_isolated_by_tenant_branch_and_period(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other budget branch',
+            code='BUDGET-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign budget organization',
+            slug='foreign-budget-organization',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign budget branch',
+            code='BUDGET-FOREIGN',
+        )
+        other_branch_user = User.objects.create_user(
+            username='other-branch-budget-user',
+            email='other-branch-budget-user@example.test',
+            password='test-password',
+            organization=self.organization,
+            branch=other_branch,
+        )
+        OrganizationMembership.objects.create(
+            user=other_branch_user,
+            organization=self.organization,
+            role='accountant',
+        )
+
+        def create_year_period(organization, name):
+            year = FinancialYear.objects.create(
+                organization=organization,
+                name=f'FY {name}',
+                starts_on=date(2026, 1, 1),
+                ends_on=date(2026, 12, 31),
+            )
+            period = AccountingPeriod.objects.create(
+                financial_year=year,
+                name=f'January {name}',
+                starts_on=date(2026, 1, 1),
+                ends_on=date(2026, 1, 31),
+            )
+            return year, period
+
+        _, period = create_year_period(self.organization, 'budget-export')
+        _, foreign_period = create_year_period(foreign_org, 'foreign-budget-export')
+        AccountingPeriod.objects.create(
+            financial_year=period.financial_year,
+            name='February budget-export',
+            starts_on=date(2026, 2, 1),
+            ends_on=date(2026, 2, 28),
+        )
+        expense = Account.objects.create(
+            organization=self.organization,
+            code='BUDGET-EXP',
+            name='Shared budget expense',
+            account_type='expense',
+        )
+        foreign_expense = Account.objects.create(
+            organization=foreign_org,
+            code='BUDGET-FOREIGN-EXP',
+            name='Foreign budget expense',
+            account_type='expense',
+        )
+
+        def post_budget_actual(organization, branch, account, reference, entry_date, amount, index):
+            cash = Account.objects.create(
+                organization=organization,
+                branch=branch,
+                code=f'BUDGET-CASH-{index}',
+                name=f'Budget cash {index}',
+                account_type='asset',
+            )
+            self._post_report_entry(
+                organization,
+                branch,
+                reference,
+                entry_date,
+                account,
+                cash,
+                amount,
+            )
+
+        post_budget_actual(
+            self.organization, self.branch, expense, 'BUDGET-OWN-ACTUAL',
+            date(2026, 1, 10), Decimal('11.00'), 'OWN',
+        )
+        post_budget_actual(
+            self.organization, other_branch, expense, 'BUDGET-OTHER-ACTUAL',
+            date(2026, 1, 10), Decimal('50.00'), 'OTHER',
+        )
+        post_budget_actual(
+            self.organization, None, expense, 'BUDGET-SHARED-ACTUAL',
+            date(2026, 1, 10), Decimal('3.00'), 'SHARED',
+        )
+        post_budget_actual(
+            self.organization, self.branch, expense, 'BUDGET-OUTSIDE-PERIOD',
+            date(2026, 2, 10), Decimal('90.00'), 'FEB',
+        )
+        post_budget_actual(
+            foreign_org, foreign_branch, foreign_expense, 'BUDGET-FOREIGN-ACTUAL',
+            date(2026, 1, 10), Decimal('400.00'), 'FOREIGN',
+        )
+        AccountingBudget.objects.create(
+            organization=self.organization,
+            period=period,
+            account=expense,
+            branch=self.branch,
+            amount=Decimal('100.00'),
+            created_by=self.user,
+        )
+        AccountingBudget.objects.create(
+            organization=self.organization,
+            period=period,
+            account=expense,
+            branch=other_branch,
+            amount=Decimal('200.00'),
+            created_by=other_branch_user,
+        )
+        AccountingBudget.objects.create(
+            organization=foreign_org,
+            period=foreign_period,
+            account=foreign_expense,
+            branch=foreign_branch,
+            amount=Decimal('500.00'),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('budget_report'),
+            {
+                'format': 'csv',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+                'financial_year': foreign_period.financial_year_id,
+                'account': foreign_expense.pk,
+                'start': 'not-a-date',
+                'search': 'Foreign budget',
+                'ordering': '-amount',
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['Branch'], 'Main')
+        self.assertEqual(rows[0]['Budget'], '100.00')
+        self.assertEqual(Decimal(rows[0]['Actual']), Decimal('11.00'))
+        self.assertEqual(Decimal(rows[0]['Shared / unallocated actual']), Decimal('3.00'))
+        self.assertEqual(Decimal(rows[0]['Variance']), Decimal('-89.00'))
+        self.assertNotIn('Other budget branch', response.content.decode())
+        self.assertNotIn('Foreign budget expense', response.content.decode())
+        html_response = self.client.get(reverse('budget_report'))
+        self.assertContains(html_response, 'Shared / unallocated actual')
+        self.assertEqual(
+            html_response.context['report_rows'][0]['unallocated_actual'],
+            Decimal('3'),
+        )
+
+    def test_fixed_asset_csv_isolated_by_tenant_branch_with_shared_assets_explicit(self):
+        other_branch = Branch.objects.create(
+            organization=self.organization,
+            name='Other asset branch',
+            code='ASSET-OTHER',
+        )
+        foreign_org = Organization.objects.create(
+            name='Foreign asset organization',
+            slug='foreign-asset-organization',
+        )
+        foreign_branch = Branch.objects.create(
+            organization=foreign_org,
+            name='Foreign asset branch',
+            code='ASSET-FOREIGN',
+        )
+
+        def create_category(organization, suffix):
+            asset_account = Account.objects.create(
+                organization=organization,
+                code=f'FA-{suffix}-A',
+                name=f'{suffix} asset account',
+                account_type='asset',
+            )
+            depreciation_account = Account.objects.create(
+                organization=organization,
+                code=f'FA-{suffix}-D',
+                name=f'{suffix} accumulated depreciation',
+                account_type='asset',
+            )
+            expense_account = Account.objects.create(
+                organization=organization,
+                code=f'FA-{suffix}-E',
+                name=f'{suffix} depreciation expense',
+                account_type='expense',
+            )
+            return FixedAssetCategory.objects.create(
+                organization=organization,
+                name=f'{suffix} asset category',
+                asset_account=asset_account,
+                accumulated_depreciation_account=depreciation_account,
+                depreciation_expense_account=expense_account,
+                default_useful_life_months=60,
+            )
+
+        def register_asset(organization, branch, category, code, name, amount, user):
+            return register_fixed_asset(
+                asset=FixedAsset(
+                    organization=organization,
+                    branch=branch,
+                    category=category,
+                    asset_code=code,
+                    name=name,
+                    acquisition_date=date(2026, 3, 10),
+                    acquisition_cost=amount,
+                    salvage_value=Decimal('0.00'),
+                    useful_life_months=60,
+                ),
+                user=user,
+            )
+
+        own_category = create_category(self.organization, 'OWN')
+        other_category = create_category(self.organization, 'OTHER')
+        shared_category = create_category(self.organization, 'SHARED')
+        foreign_category = create_category(foreign_org, 'FOREIGN')
+        foreign_user = User.objects.create_user(
+            username='foreign-asset-registrar',
+            email='foreign-asset-registrar@example.test',
+            password='test-password',
+            organization=foreign_org,
+        )
+        other_branch_user = User.objects.create_user(
+            username='other-branch-asset-registrar',
+            email='other-branch-asset-registrar@example.test',
+            password='test-password',
+            organization=self.organization,
+            branch=other_branch,
+        )
+        OrganizationMembership.objects.create(
+            user=other_branch_user,
+            organization=self.organization,
+            role='accountant',
+        )
+        OrganizationMembership.objects.create(
+            user=foreign_user,
+            organization=foreign_org,
+            role='accountant',
+        )
+        organization_finance_user = self._organization_finance_user('shared-asset-registrar')
+        register_asset(
+            self.organization, self.branch, own_category, 'ASSET-OWN',
+            'Own branch asset', Decimal('110.00'), self.user,
+        )
+        register_asset(
+            self.organization, other_branch, other_category, 'ASSET-OTHER',
+            'Other branch asset', Decimal('220.00'), other_branch_user,
+        )
+        register_asset(
+            self.organization, None, shared_category, 'ASSET-SHARED',
+            'Shared organization asset', Decimal('30.00'), organization_finance_user,
+        )
+        register_asset(
+            foreign_org, foreign_branch, foreign_category, 'ASSET-FOREIGN',
+            'Foreign organization asset', Decimal('440.00'), foreign_user,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('fixed_assets'),
+            {
+                'format': 'csv',
+                'organization': foreign_org.pk,
+                'branch': other_branch.pk,
+                'asset': 'ASSET-FOREIGN',
+                'account': 'foreign-account-id',
+                'start': 'not-a-date',
+                'search': 'Foreign organization asset',
+                'ordering': '-acquisition_cost',
+            },
+        )
+        rows = list(csv.DictReader(StringIO(response.content.decode())))
+        by_code = {row['Asset code']: row for row in rows}
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('ASSET-OWN', by_code)
+        self.assertIn('ASSET-SHARED', by_code)
+        self.assertNotIn('ASSET-OTHER', by_code)
+        self.assertNotIn('ASSET-FOREIGN', by_code)
+        self.assertEqual(by_code['ASSET-OWN']['Cost'], '110.00')
+        self.assertEqual(by_code['ASSET-SHARED']['Branch'], '')
 
     def test_reports_require_authentication_and_reject_invalid_date_ranges(self):
         response = self.client.get(reverse('trial_balance'))

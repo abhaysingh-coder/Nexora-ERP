@@ -23,6 +23,8 @@ def dashboard_home(request):
         cash_balance = Decimal('0')
         receivables = Decimal('0')
         payables = Decimal('0')
+        shared_receivables = Decimal('0')
+        shared_payables = Decimal('0')
         inventory_summary = {
             'value': Decimal('0.00'),
             'is_complete': True,
@@ -30,6 +32,7 @@ def dashboard_home(request):
         }
         low_stock_count = 0
         recent_movements = []
+        shared_recent_movements = []
     else:
         invoice_scope = {'organization': organization}
         if request.user.branch_id:
@@ -56,6 +59,22 @@ def dashboard_home(request):
             )
         receivable_lines = posted_lines.filter(account__code='1100')
         payable_lines = posted_lines.filter(account__code='2000')
+        shared_receivable_lines = receivable_lines.filter(entry__branch__isnull=True)
+        shared_payable_lines = payable_lines.filter(entry__branch__isnull=True)
+        if request.user.branch_id:
+            receivable_lines = receivable_lines.filter(entry__branch_id=request.user.branch_id)
+            payable_lines = payable_lines.filter(entry__branch_id=request.user.branch_id)
+            shared_receivables = (
+                (shared_receivable_lines.aggregate(total=Sum('debit'))['total'] or Decimal('0'))
+                - (shared_receivable_lines.aggregate(total=Sum('credit'))['total'] or Decimal('0'))
+            )
+            shared_payables = (
+                (shared_payable_lines.aggregate(total=Sum('credit'))['total'] or Decimal('0'))
+                - (shared_payable_lines.aggregate(total=Sum('debit'))['total'] or Decimal('0'))
+            )
+        else:
+            shared_receivables = Decimal('0')
+            shared_payables = Decimal('0')
         receivables = (
             (receivable_lines.aggregate(total=Sum('debit'))['total'] or Decimal('0'))
             - (receivable_lines.aggregate(total=Sum('credit'))['total'] or Decimal('0'))
@@ -96,6 +115,17 @@ def dashboard_home(request):
                 **({'branch_id': request.user.branch_id} if request.user.branch_id else {}),
             ).select_related('branch', 'created_by').order_by('-entry_date')[:5]
         )
+        shared_recent_movements = (
+            list(
+                JournalEntry.objects.filter(
+                    organization=organization,
+                    status='posted',
+                    branch__isnull=True,
+                ).select_related('created_by').order_by('-entry_date')[:5]
+            )
+            if request.user.branch_id
+            else []
+        )
 
     context = {
         'sales_total': sales_total,
@@ -103,11 +133,15 @@ def dashboard_home(request):
         'cash_balance': cash_balance,
         'receivables': receivables,
         'payables': payables,
+        'shared_receivables': shared_receivables,
+        'shared_payables': shared_payables,
+        'has_branch_scope': bool(request.user.branch_id),
         'inventory_value': inventory_summary['value'],
         'inventory_value_complete': inventory_summary['is_complete'],
         'inventory_valuation_exceptions': inventory_summary['exception_count'],
         'low_stock_count': low_stock_count,
         'recent_movements': recent_movements,
+        'shared_recent_movements': shared_recent_movements,
         'active_page': 'dashboard',
         'organization': organization,
     }

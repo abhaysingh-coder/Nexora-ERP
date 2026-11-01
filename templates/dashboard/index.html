@@ -48,6 +48,19 @@
                 <li class="empty-state">No posted journal entries yet.</li>
             {% endfor %}
         </ul>
+        {% if has_branch_scope %}
+        <div class="panel-heading"><div><p class="eyebrow">SHARED / UNALLOCATED</p><h2>Unassigned journal activity</h2></div></div>
+        <ul class="list-stack">
+            {% for entry in shared_recent_movements %}
+                <li>
+                    <span class="activity-mark">▤</span><span class="activity-copy"><strong>{{ entry.reference }}</strong><small>{{ entry.narration|default:'Journal entry' }}</small></span>
+                    <time datetime="{{ entry.entry_date|date:'Y-m-d' }}">{{ entry.entry_date|date:'d M Y' }}</time>
+                </li>
+            {% empty %}
+                <li class="empty-state">No shared or unallocated journal entries.</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
     </div>
     <div class="panel snapshot-panel">
         <div class="panel-heading"><div><p class="eyebrow">WORKING CAPITAL</p><h2>Business snapshot</h2></div></div>
@@ -56,6 +69,10 @@
             {% if not inventory_value_complete %}<li class="valuation-warning"><span>Valuation exceptions</span><strong>{{ inventory_valuation_exceptions }}</strong></li>{% endif %}
             <li><span>Receivables</span><strong>{{ receivables|default:'0.00' }}</strong></li>
             <li><span>Payables</span><strong>{{ payables|default:'0.00' }}</strong></li>
+            {% if has_branch_scope %}
+            <li><span>Shared / unallocated receivables</span><strong>{{ shared_receivables|default:'0.00' }}</strong></li>
+            <li><span>Shared / unallocated payables</span><strong>{{ shared_payables|default:'0.00' }}</strong></li>
+            {% endif %}
         </ul>
         <a class="text-link" href="{% url 'inventory_valuation' %}">Review inventory valuation <span aria-hidden="true">→</span></a>
     </div>

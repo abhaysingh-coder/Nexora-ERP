@@ -27,6 +27,7 @@
         <button class="button" type="submit">Filter</button>
     </form>
     {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+    {% if has_shared_scope %}<h2>Assigned-branch entries</h2>{% endif %}
     <div class="table-wrap"><table>
         <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running net</th></tr></thead>
         <tbody>
@@ -40,6 +41,23 @@
         <span>Page {{ rows.number }} of {{ rows.paginator.num_pages }}</span>
         {% if rows.has_next %}<a class="button-link" href="?page={{ rows.next_page_number }}&amp;account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next</a>{% endif %}
     </div>
+    {% endif %}
+    {% if has_shared_scope %}
+    <h2>Shared / unallocated entries</h2>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Reference</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running net</th></tr></thead>
+        <tbody>
+        {% for row in shared_rows %}<tr><td>{{ row.date }}</td><td>{{ row.reference }}</td><td>{{ row.account.code }} — {{ row.account.name }}</td><td>{{ row.description }}</td><td>{{ row.debit }}</td><td>{{ row.credit }}</td><td>{{ row.balance }}</td></tr>
+        {% empty %}<tr><td colspan="7">No shared or unallocated journal lines found for this period.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if shared_rows.has_other_pages %}
+    <div class="pagination">
+        {% if shared_rows.has_previous %}<a class="button-link" href="?shared_page={{ shared_rows.previous_page_number }}&amp;account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Previous shared page</a>{% endif %}
+        <span>Shared page {{ shared_rows.number }} of {{ shared_rows.paginator.num_pages }}</span>
+        {% if shared_rows.has_next %}<a class="button-link" href="?shared_page={{ shared_rows.next_page_number }}&amp;account={{ selected_account }}&amp;financial_year={{ selected_financial_year.pk }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">Next shared page</a>{% endif %}
+    </div>
+    {% endif %}
     {% endif %}
 </section>
 {% endblock %}
